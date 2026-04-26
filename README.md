@@ -51,3 +51,8 @@ PYTHONPATH=src python3 -m amongus_env.eval_suite
 
 The eval currently checks the golden false-alibi episode for label order, task
 reward, meeting protocol state, false-alibi penalty, and bot-vote ejection.
+
+## Hugging Face Space
+
+The repo includes a Gradio `app.py` for a Space. It exposes buttons for the
+baseline eval and the full golden trace.

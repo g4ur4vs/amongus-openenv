@@ -9,11 +9,23 @@ from .eval_suite import run_eval_suite
 
 
 def summarize_training_result(train_json_path: Path) -> dict[str, Any]:
-    result = json.loads(train_json_path.read_text())
+    if not train_json_path.exists():
+        return _missing_training_summary(
+            source=str(train_json_path),
+            error=f"Training JSON does not exist: {train_json_path}",
+        )
+    try:
+        result = json.loads(train_json_path.read_text())
+    except json.JSONDecodeError as exc:
+        return _missing_training_summary(
+            source=str(train_json_path),
+            error=f"Training JSON is not valid JSON: {exc}",
+        )
     saved_model_path = result.get("saved_model_path")
     checkpoint_saved = bool(saved_model_path and Path(saved_model_path).exists())
     return {
         "source": str(train_json_path),
+        "error": None,
         "ok": result.get("ok") is True,
         "trainer_constructed": result.get("trainer_constructed") is True,
         "trained": result.get("trained") is True,
@@ -55,9 +67,13 @@ def build_training_report(
     }
 
 
-def _missing_training_summary() -> dict[str, Any]:
+def _missing_training_summary(
+    source: Optional[str] = None,
+    error: Optional[str] = None,
+) -> dict[str, Any]:
     return {
-        "source": None,
+        "source": source,
+        "error": error,
         "ok": False,
         "trainer_constructed": False,
         "trained": False,

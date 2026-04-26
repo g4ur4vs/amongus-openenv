@@ -92,6 +92,11 @@ train_command = (
     f"--output-dir {OUTPUT_DIR}"
 )
 run(f"{train_command} > rl_train.json")
+train_json_path = Path("rl_train.json")
+if not train_json_path.exists() or not train_json_path.read_text().strip():
+    raise FileNotFoundError(
+        "rl_train.json was not created. Rerun the grpo_train cell and inspect its stderr."
+    )
 
 # %%
 status_path = Path(OUTPUT_DIR)

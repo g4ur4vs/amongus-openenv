@@ -32,6 +32,25 @@ def test_summarize_training_result_reads_saved_checkpoint(tmp_path) -> None:
     assert summary["saved_model_path"] == str(final_model)
 
 
+def test_summarize_training_result_reports_missing_file(tmp_path) -> None:
+    missing = tmp_path / "missing-train.json"
+
+    summary = summarize_training_result(missing)
+
+    assert summary["ok"] is False
+    assert summary["trained"] is False
+    assert summary["source"] == str(missing)
+    assert "does not exist" in summary["error"]
+
+
+def test_training_report_handles_missing_train_json_without_traceback(tmp_path) -> None:
+    report = build_training_report(tmp_path / "missing-train.json")
+
+    assert report["ok"] is False
+    assert report["rl_training"]["trained"] is False
+    assert "does not exist" in report["rl_training"]["error"]
+
+
 def test_training_report_is_honest_about_missing_policy_improvement(tmp_path) -> None:
     train_json = tmp_path / "train.json"
     train_json.write_text(

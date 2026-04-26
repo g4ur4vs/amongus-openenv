@@ -5,15 +5,19 @@ from typing import Any, Iterable, Optional
 from .models import (
     CallMeeting,
     CompleteTask,
+    ClaimKind,
+    FakeTask,
     Kill,
     Move,
     Observation,
     PassMeeting,
     ReportBody,
     Speak,
+    Vent,
     Vote,
 )
 from .openenv_server import AmongUsEnvironment
+from .trace import record_step
 
 
 class AmongUsToolEnv:
@@ -37,12 +41,18 @@ class AmongUsToolEnv:
             impostor_ids=impostor_ids,
         )
         self.reward = 0.0
+        self.episode_return = 0.0
+        self.rollout_trace: list[dict[str, Any]] = []
         self.last_observation: Optional[Observation] = None
 
     def reset(self, **kwargs: Any) -> str:
         """Reset the match and return the initial observation summary."""
         self.last_observation = self.env.reset()
         self.reward = self.last_observation.reward
+        self.episode_return = 0.0
+        self.rollout_trace = [
+            record_step("reset", "reset", self.last_observation),
+        ]
         return self._summarize(self.last_observation)
 
     def move(self, room: str) -> str:
@@ -57,6 +67,19 @@ class AmongUsToolEnv:
     def complete_task(self) -> str:
         """Complete an unfinished crewmate task in the current room."""
         return self._step(CompleteTask())
+
+    def fake_task(self) -> str:
+        """Fake the current room's task as an impostor without task progress reward."""
+        return self._step(FakeTask())
+
+    def vent(self, room: str) -> str:
+        """
+        Use an impostor-only vent hop.
+
+        Args:
+            room: Destination vent room.
+        """
+        return self._step(Vent(room=room))
 
     def kill(self, target_id: str) -> str:
         """
@@ -100,7 +123,14 @@ class AmongUsToolEnv:
     def _step(self, action: Any) -> str:
         self.last_observation = self.env.step(action)
         self.reward = self.last_observation.reward
+        self.episode_return += self.reward
+        self.rollout_trace.append(
+            record_step(action.type, action.model_dump_json(), self.last_observation)
+        )
         return self._summarize(self.last_observation)
+
+    def get_rollout_trace(self) -> list[dict[str, Any]]:
+        return list(self.rollout_trace)
 
     def _summarize(self, observation: Observation) -> str:
         """Return a compact tool result with the latest social evidence."""
@@ -129,6 +159,16 @@ class AmongUsToolEnv:
 
     def _summarize_claim(self, claim: Any) -> str:
         truth_value = "true" if claim.truth_value else "false"
+        if claim.kind is ClaimKind.SAW_VENT:
+            return (
+                f"{claim.kind.value}({claim.speaker_id} saw "
+                f"{claim.target_id} vent)={truth_value}"
+            )
+        if claim.kind is ClaimKind.ACCUSE_IMPOSTOR:
+            return (
+                f"{claim.kind.value}({claim.speaker_id} accused "
+                f"{claim.target_id})={truth_value}"
+            )
         if claim.target_id:
             return (
                 f"{claim.kind.value}({claim.speaker_id} saw "
@@ -140,5 +180,13 @@ class AmongUsToolEnv:
         )
 
 
-def reward_from_game_state(environments: Iterable[AmongUsToolEnv], **kwargs: Any) -> list[float]:
-    return [environment.reward for environment in environments]
+def reward_from_game_state(
+    environments: Iterable[AmongUsToolEnv],
+    aggregation: str = "last_step",
+    **kwargs: Any,
+) -> list[float]:
+    if aggregation == "episode_return":
+        return [environment.episode_return for environment in environments]
+    if aggregation == "last_step":
+        return [environment.reward for environment in environments]
+    raise ValueError(f"Unknown reward aggregation: {aggregation}")

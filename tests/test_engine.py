@@ -3,6 +3,7 @@ from amongus_env.models import (
     CallMeeting,
     ClaimKind,
     CompleteTask,
+    FakeTask,
     Kill,
     Move,
     PassMeeting,
@@ -10,6 +11,7 @@ from amongus_env.models import (
     PlayerRole,
     ReportBody,
     Speak,
+    Vent,
     Vote,
     Winner,
 )
@@ -106,6 +108,54 @@ def test_crewmate_completes_current_room_task_for_dense_reward() -> None:
     assert "Completed task" in observation.message_log[-1]
 
 
+def test_impostor_fake_task_in_valid_room_has_no_task_reward() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["red"])
+    engine.reset()
+    engine.step(Move(room="Electrical"))
+
+    observation = engine.step(FakeTask())
+
+    assert observation.reward == 0.0
+    assert observation.task_list == []
+    assert "Faked task Fix Wiring" in observation.message_log[-1]
+
+
+def test_crewmate_fake_task_is_illegal() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(Move(room="Electrical"))
+
+    observation = engine.step(FakeTask())
+
+    assert observation.reward == -0.1
+    assert "Crewmates cannot fake tasks" in observation.message_log[-1]
+
+
+def test_impostor_vent_legal_hop_updates_location() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["red"])
+    engine.reset()
+    engine.step(Move(room="Electrical"))
+
+    observation = engine.step(Vent(room="MedBay"))
+
+    assert observation.reward == 0.0
+    assert observation.location == "MedBay"
+    assert engine.location_history["red"][-1] == "MedBay"
+    assert "Vented to MedBay" in observation.message_log[-1]
+
+
+def test_crewmate_cannot_vent() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(Move(room="Electrical"))
+
+    observation = engine.step(Vent(room="MedBay"))
+
+    assert observation.reward == -0.1
+    assert observation.location == "Electrical"
+    assert "Crewmates cannot vent" in observation.message_log[-1]
+
+
 def test_impostor_kill_marks_body_and_rewards_controlled_impostor() -> None:
     engine = AmongUsEngine(seed=1, impostor_ids=["red"])
     engine.reset()
@@ -190,6 +240,52 @@ def test_meeting_speech_parses_saw_player_claim() -> None:
     assert observation.claims[-1].target_id == "blue"
     assert observation.claims[-1].room == "MedBay"
     assert observation.claims[-1].truth_value is True
+
+
+def test_meeting_speech_parses_true_vent_claim() -> None:
+    engine = AmongUsEngine(
+        seed=1,
+        controlled_player_id="green",
+        impostor_ids=["red"],
+        player_ids=["red", "blue", "green", "yellow"],
+    )
+    engine.reset()
+    engine.players["red"].location = "Electrical"
+    engine.location_history["red"].append("Electrical")
+    engine.step(CallMeeting())
+    engine.vent_since_meeting["red"] = True
+
+    observation = engine.step(Speak(message="I saw red vent"))
+
+    assert observation.claims[-1].kind is ClaimKind.SAW_VENT
+    assert observation.claims[-1].target_id == "red"
+    assert observation.claims[-1].truth_value is True
+
+
+def test_false_vent_claim_gets_hallucination_penalty() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+
+    observation = engine.step(Speak(message="I saw blue vent"))
+
+    assert observation.reward == -1.0
+    assert observation.claims[-1].kind is ClaimKind.SAW_VENT
+    assert observation.claims[-1].truth_value is False
+
+
+def test_accusation_claim_guides_bot_votes_to_impostor() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+    speak = engine.step(Speak(message="I accuse blue"))
+
+    observation = engine.step(Vote(target_id="green"))
+
+    assert speak.claims[-1].kind is ClaimKind.ACCUSE_IMPOSTOR
+    assert speak.claims[-1].truth_value is True
+    assert engine.players["blue"].ejected is True
+    assert observation.winner is Winner.CREWMATES
 
 
 def test_speaking_outside_meeting_is_illegal() -> None:

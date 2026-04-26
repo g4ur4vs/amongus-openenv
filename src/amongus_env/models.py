@@ -29,6 +29,8 @@ class Winner(str, Enum):
 class ClaimKind(str, Enum):
     SELF_LOCATION = "self_location"
     SAW_PLAYER = "saw_player"
+    SAW_VENT = "saw_vent"
+    ACCUSE_IMPOSTOR = "accuse_impostor"
 
 
 class Move(StrictModel):
@@ -38,6 +40,15 @@ class Move(StrictModel):
 
 class CompleteTask(StrictModel):
     type: Literal["complete_task"] = "complete_task"
+
+
+class FakeTask(StrictModel):
+    type: Literal["fake_task"] = "fake_task"
+
+
+class Vent(StrictModel):
+    type: Literal["vent"] = "vent"
+    room: str
 
 
 class Kill(StrictModel):
@@ -71,6 +82,8 @@ Action = Annotated[
     Union[
         Move,
         CompleteTask,
+        FakeTask,
+        Vent,
         Kill,
         ReportBody,
         CallMeeting,

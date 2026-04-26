@@ -26,6 +26,12 @@ For OpenEnv HTTP serving or future TRL experiments:
 python3 -m pip install -e ".[dev,training]"
 ```
 
+For the local Gradio Space app:
+
+```bash
+python3 -m pip install -e ".[space]"
+```
+
 ## Verify
 
 ```bash
@@ -70,9 +76,10 @@ Run the pass/fail eval JSON:
 amongus-baseline-eval
 ```
 
-The eval currently runs six deterministic scenarios: golden false alibi, invalid
+The eval currently runs ten deterministic scenarios: golden false alibi, invalid
 movement, crewmate task route, meeting pass/bot-majority, impostor parity win,
-and kill cooldown blocking.
+kill cooldown blocking, impostor fake task, vent claim verification, no-majority
+meeting, and multi-impostor parity.
 
 Run the deterministic Deception Elo metric:
 
@@ -83,6 +90,23 @@ amongus-deception-elo
 This scores the false self-location claim resolution as deceiver-vs-assembly Elo:
 the deceiver loses Elo when the false claimant is ejected, and gains Elo when a
 different player is ejected.
+
+Run a deterministic repeated-trace Deception Elo leaderboard:
+
+```bash
+amongus-deception-leaderboard --runs 5
+```
+
+## MVP Mechanics
+
+The environment now includes a small but verifiable deception surface:
+
+- `fake_task` lets impostors fake the current room's task for `0.0` reward without
+  mutating crewmate task progress.
+- `vent(room)` lets impostors move through a tiny vent graph.
+- `Speak("I saw red vent")` is parsed as a verifiable `saw_vent` claim.
+- `Speak("I accuse blue")` is parsed as a verifiable accusation; bots can follow
+  true accusations when no higher-priority false verifiable claim exists.
 
 ## GRPO Training Skeleton
 
@@ -108,7 +132,42 @@ load a model, download weights, or claim training results.
 
 Reward contract: `reward_from_game_state([env])` returns one dense RLVR reward
 per `AmongUsToolEnv`, equal to that environment's latest `Observation.reward`.
-The current contract is step-level, not an episode-return aggregate.
+Use `aggregation="episode_return"` to return the sum of step rewards since the
+last reset.
+
+Construct a real `GRPOTrainer` only with a local model directory:
+
+```bash
+amongus-grpo-train --construct-trainer --local-model /path/to/local/model
+```
+
+Run one explicit trainer step only when you are ready to load that local model:
+
+```bash
+amongus-grpo-train --construct-trainer --train --local-model /path/to/local/model
+```
+
+The command refuses to load the default hub model. This prevents accidental 7B
+downloads or fake training claims on machines that do not have the model and
+training stack prepared.
+
+### Colab GPU Smoke
+
+Use `notebooks/colab_gpu_grpo.py` in Google Colab with a T4 GPU. It clones this
+repo, installs `.[training]`, verifies the eval suite, and runs one explicit
+GRPO training step with the smallest public TRL smoke model:
+
+```bash
+python -m amongus_env.grpo_train \
+  --construct-trainer \
+  --train \
+  --allow-hub-model \
+  --model-id trl-internal-testing/tiny-Qwen2ForCausalLM-2.5 \
+  --output-dir outputs/colab-grpo-tiny
+```
+
+For a tiny-but-real instruct model, change `MODEL_ID` in the Colab script to
+`HuggingFaceTB/SmolLM2-135M-Instruct`.
 
 ## OpenEnv Server
 
@@ -133,7 +192,8 @@ the current PyPI `openenv` package it serves the same `/health`, `/reset`, and
 ## Hugging Face Space
 
 The repo includes a Gradio `app.py` for a Space. It exposes buttons for the
-baseline eval and the full golden trace.
+baseline eval, golden trace, reasoning trace, Deception Elo, leaderboard, and
+GRPO dry-run status.
 
 Create and upload the Space after authenticating safely:
 

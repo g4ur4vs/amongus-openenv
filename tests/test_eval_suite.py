@@ -28,8 +28,8 @@ def test_eval_suite_runs_multiple_baseline_scenarios() -> None:
     assert result["schema_version"] == 1
     assert result["ok"] is True
     assert result["summary"] == {
-        "scenarios": 6,
-        "passed": 6,
+        "scenarios": 10,
+        "passed": 10,
         "failed": 0,
     }
     assert [scenario["episode"] for scenario in result["scenarios"]] == [
@@ -39,6 +39,10 @@ def test_eval_suite_runs_multiple_baseline_scenarios() -> None:
         "meeting_pass_bot_majority",
         "impostor_parity_win",
         "kill_cooldown_blocks_second_kill",
+        "impostor_fake_task",
+        "vent_claim_verification",
+        "meeting_no_majority",
+        "multi_impostor_parity",
     ]
 
 

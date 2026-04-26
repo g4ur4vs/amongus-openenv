@@ -2,6 +2,7 @@ from amongus_env.models import (
     ActionAdapter,
     Claim,
     ClaimKind,
+    FakeTask,
     Kill,
     Move,
     Observation,
@@ -10,6 +11,7 @@ from amongus_env.models import (
     PlayerRole,
     Speak,
     TaskState,
+    Vent,
 )
 
 
@@ -20,11 +22,15 @@ def test_action_adapter_validates_discriminated_actions() -> None:
         {"type": "speak", "message": "I was in Electrical"}
     )
     pass_meeting = ActionAdapter.validate_python({"type": "pass"})
+    fake_task = ActionAdapter.validate_python({"type": "fake_task"})
+    vent = ActionAdapter.validate_python({"type": "vent", "room": "MedBay"})
 
     assert move == Move(room="Electrical")
     assert kill == Kill(target_id="blue")
     assert speak == Speak(message="I was in Electrical")
     assert pass_meeting == PassMeeting()
+    assert fake_task == FakeTask()
+    assert vent == Vent(room="MedBay")
 
 
 def test_observation_contains_training_surface() -> None:

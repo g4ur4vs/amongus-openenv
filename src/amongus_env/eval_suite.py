@@ -5,7 +5,7 @@ from typing import Any
 
 from .engine import AmongUsEngine
 from .golden_episode import run_golden_episode
-from .models import CallMeeting, CompleteTask, Kill, Move, PassMeeting, Vote
+from .models import CallMeeting, CompleteTask, FakeTask, Kill, Move, PassMeeting, Speak, Vent, Vote
 from .trace import record_step
 
 Check = dict[str, Any]
@@ -29,6 +29,10 @@ def run_eval_suite() -> dict[str, Any]:
         _run_meeting_pass_eval(),
         _run_impostor_parity_eval(),
         _run_kill_cooldown_eval(),
+        _run_impostor_fake_task_eval(),
+        _run_vent_claim_eval(),
+        _run_no_majority_eval(),
+        _run_multi_impostor_eval(),
     ]
     passed = sum(1 for scenario in scenarios if scenario["ok"])
     return {
@@ -264,6 +268,121 @@ def _run_kill_cooldown_eval() -> dict[str, Any]:
                 and second.get("reward") == -0.1
                 and second.get("message_log", [])[-1:] == ["Kill is on cooldown"],
                 f"first={first.get('reward')}; second={second.get('reward')}",
+            )
+        ],
+    )
+
+
+def _run_impostor_fake_task_eval() -> dict[str, Any]:
+    engine = AmongUsEngine(seed=1, impostor_ids=["red"])
+    trace = [
+        _record("reset", "reset", engine.reset()),
+        _record("move_electrical", "move to Electrical", engine.step(Move(room="Electrical"))),
+        _record("fake_task", "fake task in Electrical", engine.step(FakeTask())),
+    ]
+    final = _step_observation(trace, "fake_task")
+    return _scenario_result(
+        "impostor_fake_task",
+        trace,
+        [
+            _check(
+                "fake_task_no_reward",
+                final.get("reward") == 0.0
+                and final.get("task_list") == []
+                and final.get("message_log", [])[-1:] == ["Faked task Fix Wiring"],
+                f"reward={final.get('reward')}; last_message={final.get('message_log', [])[-1:]}",
+            )
+        ],
+    )
+
+
+def _run_vent_claim_eval() -> dict[str, Any]:
+    engine = AmongUsEngine(
+        seed=1,
+        controlled_player_id="red",
+        impostor_ids=["red"],
+        player_ids=["red", "blue", "green", "yellow"],
+    )
+    trace = [
+        _record("reset", "reset", engine.reset()),
+        _record("move_electrical", "move to Electrical", engine.step(Move(room="Electrical"))),
+        _record("vent_medbay", "vent to MedBay", engine.step(Vent(room="MedBay"))),
+    ]
+    engine.config.controlled_player_id = "green"
+    trace.extend(
+        [
+            _record("call_meeting", "call meeting", engine.step(CallMeeting())),
+            _record("saw_vent", "claim: I saw red vent", engine.step(Speak(message="I saw red vent"))),
+        ]
+    )
+    claim_observation = _step_observation(trace, "saw_vent")
+    claims = claim_observation.get("claims", [])
+    claim = claims[-1] if claims else {}
+    return _scenario_result(
+        "vent_claim_verification",
+        trace,
+        [
+            _check(
+                "true_vent_claim",
+                claim.get("kind") == "saw_vent"
+                and claim.get("target_id") == "red"
+                and claim.get("truth_value") is True,
+                f"claim={claim}",
+            )
+        ],
+    )
+
+
+def _run_no_majority_eval() -> dict[str, Any]:
+    engine = AmongUsEngine(
+        seed=1,
+        impostor_ids=["blue"],
+        player_ids=["red", "blue", "green"],
+    )
+    trace = [
+        _record("reset", "reset", engine.reset()),
+        _record("call_meeting", "call meeting", engine.step(CallMeeting())),
+        _record("pass_meeting", "pass meeting", engine.step(PassMeeting())),
+    ]
+    engine._bot_votes = lambda human_target_id: {}
+    trace.append(_record("vote_blue", "vote blue", engine.step(Vote(target_id="blue"))))
+    vote = _step_observation(trace, "vote_blue")
+    return _scenario_result(
+        "meeting_no_majority",
+        trace,
+        [
+            _check(
+                "no_majority_no_ejection",
+                vote.get("reward") == 0.0
+                and vote.get("phase") == "tasks"
+                and vote.get("message_log", [])[-1:] == ["No majority; nobody ejected"],
+                f"reward={vote.get('reward')}; last_message={vote.get('message_log', [])[-1:]}",
+            )
+        ],
+    )
+
+
+def _run_multi_impostor_eval() -> dict[str, Any]:
+    engine = AmongUsEngine(
+        seed=1,
+        impostor_ids=["red", "blue"],
+        player_ids=["red", "blue", "green", "yellow"],
+    )
+    trace = [
+        _record("reset", "reset", engine.reset()),
+        _record("kill_green", "kill green", engine.step(Kill(target_id="green"))),
+    ]
+    final = _step_observation(trace, "kill_green")
+    return _scenario_result(
+        "multi_impostor_parity",
+        trace,
+        [
+            _check(
+                "multi_impostor_parity_win",
+                final.get("done") is True
+                and final.get("winner") == "impostors"
+                and final.get("reward") == 1.5,
+                f"reward={final.get('reward')}; winner={final.get('winner')}",
             )
         ],
     )

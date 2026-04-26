@@ -11,6 +11,7 @@ from .models import (
     Claim,
     ClaimKind,
     CompleteTask,
+    FakeTask,
     GameConfig,
     Kill,
     Move,
@@ -22,6 +23,7 @@ from .models import (
     ReportBody,
     Speak,
     TaskState,
+    Vent,
     Vote,
     Winner,
 )
@@ -34,6 +36,12 @@ ROOM_GRAPH = {
     "Admin": {"Cafeteria", "Storage"},
     "Storage": {"Admin", "Electrical", "Navigation"},
     "Navigation": {"Storage"},
+    "Security": {"Electrical", "MedBay"},
+}
+
+VENT_GRAPH = {
+    "Electrical": {"MedBay", "Security"},
+    "MedBay": {"Electrical", "Security"},
     "Security": {"Electrical", "MedBay"},
 }
 
@@ -64,6 +72,8 @@ class AmongUsEngine:
         self.players: dict[str, PlayerState] = {}
         self.tasks_by_player: dict[str, list[TaskState]] = {}
         self.location_history: dict[str, list[str]] = {}
+        self.faked_tasks: set[tuple[str, str]] = set()
+        self.vent_since_meeting: dict[str, bool] = {}
         self.discussion_log: list[str] = []
         self.claims: list[Claim] = []
         self.dead_bodies: set[str] = set()
@@ -88,6 +98,8 @@ class AmongUsEngine:
         self.players = {}
         self.tasks_by_player = {}
         self.location_history = {}
+        self.faked_tasks = set()
+        self.vent_since_meeting = {player_id: False for player_id in self.config.player_ids}
         self.discussion_log = []
         self.claims = []
         self.dead_bodies = set()
@@ -152,6 +164,10 @@ class AmongUsEngine:
             reward = self._move(action.room)
         elif isinstance(action, CompleteTask):
             reward = self._complete_task()
+        elif isinstance(action, FakeTask):
+            reward = self._fake_task()
+        elif isinstance(action, Vent):
+            reward = self._vent(action.room)
         elif isinstance(action, Kill):
             reward = self._kill(action.target_id)
         elif isinstance(action, ReportBody):
@@ -201,6 +217,51 @@ class AmongUsEngine:
                 return 0.2
 
         return self._illegal(f"No incomplete task in {player.location}").reward
+
+    def _fake_task(self) -> float:
+        player = self.controlled_player
+        if self.phase is not Phase.TASKS:
+            return self._illegal("Cannot fake tasks during meeting").reward
+        if player.role is not PlayerRole.IMPOSTOR:
+            return self._illegal("Crewmates cannot fake tasks").reward
+        if not player.alive or player.ejected:
+            return self._illegal("Eliminated players cannot fake tasks").reward
+
+        task = self._task_for_room(player.location)
+        if task is None:
+            return self._illegal(f"No task to fake in {player.location}").reward
+        key = (player.player_id, task.room)
+        if key in self.faked_tasks:
+            return self._illegal(f"Already faked task in {task.room}").reward
+
+        self.faked_tasks.add(key)
+        self._tick_cooldowns()
+        self.message_log.append(f"Faked task {task.name}")
+        return 0.0
+
+    def _task_for_room(self, room: str) -> Optional[TaskState]:
+        for task in DEFAULT_TASKS:
+            if task.room == room:
+                return task
+        return None
+
+    def _vent(self, room: str) -> float:
+        player = self.controlled_player
+        if self.phase is not Phase.TASKS:
+            return self._illegal("Cannot vent during meeting").reward
+        if player.role is not PlayerRole.IMPOSTOR:
+            return self._illegal("Crewmates cannot vent").reward
+        if not player.alive or player.ejected:
+            return self._illegal("Eliminated players cannot vent").reward
+        if room not in VENT_GRAPH.get(player.location, set()):
+            return self._illegal(f"Invalid vent from {player.location} to {room}").reward
+
+        player.location = room
+        self.location_history[player.player_id].append(room)
+        self.vent_since_meeting[player.player_id] = True
+        self._tick_cooldowns()
+        self.message_log.append(f"Vented to {room}")
+        return 0.0
 
     def _kill(self, target_id: str) -> float:
         player = self.controlled_player
@@ -268,7 +329,7 @@ class AmongUsEngine:
         if claim is not None:
             self.claims.append(claim)
             if (
-                claim.kind is ClaimKind.SELF_LOCATION
+                claim.kind in {ClaimKind.SELF_LOCATION, ClaimKind.SAW_VENT}
                 and claim.truth_value is False
             ):
                 self._open_voting()
@@ -326,6 +387,37 @@ class AmongUsEngine:
                 truth_value=room in self.location_history.get(target_id, []),
             )
 
+        saw_vent_match = re.fullmatch(
+            r"\s*i\s+saw\s+([A-Za-z0-9_-]+)\s+vent\s*",
+            message,
+            flags=re.IGNORECASE,
+        )
+        if saw_vent_match:
+            target_id = saw_vent_match.group(1)
+            return Claim(
+                kind=ClaimKind.SAW_VENT,
+                speaker_id=speaker_id,
+                target_id=target_id,
+                room=self.controlled_player.location,
+                truth_value=self.vent_since_meeting.get(target_id, False),
+            )
+
+        accusation_match = re.fullmatch(
+            r"\s*(?:i\s+accuse|i\s+think)\s+([A-Za-z0-9_-]+)(?:\s+is\s+the\s+impostor)?\s*",
+            message,
+            flags=re.IGNORECASE,
+        )
+        if accusation_match:
+            target_id = accusation_match.group(1)
+            target = self.players.get(target_id)
+            return Claim(
+                kind=ClaimKind.ACCUSE_IMPOSTOR,
+                speaker_id=speaker_id,
+                target_id=target_id,
+                room=self.controlled_player.location,
+                truth_value=target is not None and target.role is PlayerRole.IMPOSTOR,
+            )
+
         return None
 
     def _canonical_room(self, room: str) -> str:
@@ -374,8 +466,11 @@ class AmongUsEngine:
         return reward
 
     def _bot_votes(self, human_target_id: str) -> dict[str, str]:
-        false_speaker_id = self._latest_false_self_location_speaker()
+        false_speaker_id = self._latest_false_penalized_claim_speaker()
         if false_speaker_id is None:
+            accused_impostor_id = self._latest_true_accusation_target()
+            if accused_impostor_id is not None:
+                return self._bot_vote_map(accused_impostor_id)
             return {
                 player.player_id: human_target_id
                 for player in self.players.values()
@@ -386,21 +481,36 @@ class AmongUsEngine:
         target = self.players.get(false_speaker_id)
         if target is None or not target.alive or target.ejected:
             return {}
+        return self._bot_vote_map(false_speaker_id)
+
+    def _bot_vote_map(self, target_id: str) -> dict[str, str]:
         return {
-            player.player_id: false_speaker_id
+            player.player_id: target_id
             for player in self.players.values()
             if player.player_id != self.controlled_player.player_id
             and player.alive
             and not player.ejected
         }
 
-    def _latest_false_self_location_speaker(self) -> Optional[str]:
+    def _latest_false_penalized_claim_speaker(self) -> Optional[str]:
         for claim in reversed(self.claims):
             if (
-                claim.kind is ClaimKind.SELF_LOCATION
+                claim.kind in {ClaimKind.SELF_LOCATION, ClaimKind.SAW_VENT}
                 and claim.truth_value is False
             ):
                 return claim.speaker_id
+        return None
+
+    def _latest_true_accusation_target(self) -> Optional[str]:
+        for claim in reversed(self.claims):
+            if (
+                claim.kind is ClaimKind.ACCUSE_IMPOSTOR
+                and claim.truth_value is True
+                and claim.target_id is not None
+            ):
+                target = self.players.get(claim.target_id)
+                if target is not None and target.alive and not target.ejected:
+                    return claim.target_id
         return None
 
     def _no_majority(self) -> float:
@@ -412,6 +522,9 @@ class AmongUsEngine:
     def _reset_meeting_protocol(self) -> None:
         self.voting_open = False
         self.meeting_turns_remaining = 0
+        self.vent_since_meeting = {
+            player_id: False for player_id in self.config.player_ids
+        }
 
     def _check_win_conditions(self) -> float:
         alive_crewmates = [

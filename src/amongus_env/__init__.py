@@ -7,6 +7,7 @@ from .models import (
     Claim,
     ClaimKind,
     CompleteTask,
+    FakeTask,
     Kill,
     Move,
     Observation,
@@ -15,6 +16,7 @@ from .models import (
     PlayerRole,
     ReportBody,
     Speak,
+    Vent,
     Vote,
 )
 
@@ -25,6 +27,7 @@ __all__ = [
     "Claim",
     "ClaimKind",
     "CompleteTask",
+    "FakeTask",
     "Kill",
     "Move",
     "Observation",
@@ -33,5 +36,6 @@ __all__ = [
     "PlayerRole",
     "ReportBody",
     "Speak",
+    "Vent",
     "Vote",
 ]

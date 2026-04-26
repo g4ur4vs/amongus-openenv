@@ -49,8 +49,9 @@ Run the pass/fail eval JSON:
 PYTHONPATH=src python3 -m amongus_env.eval_suite
 ```
 
-The eval currently checks the golden false-alibi episode for label order, task
-reward, meeting protocol state, false-alibi penalty, and bot-vote ejection.
+The eval currently runs six deterministic scenarios: golden false alibi, invalid
+movement, crewmate task route, meeting pass/no-majority, impostor parity win,
+and kill cooldown blocking.
 
 ## Hugging Face Space
 
@@ -62,6 +63,11 @@ Create and upload the Space after authenticating safely:
 ```bash
 read -s HF_TOKEN
 export HF_TOKEN
+export HF_USERNAME=your-hf-username-or-org
 python3 scripts/create_hf_space.py
-unset HF_TOKEN
+unset HF_TOKEN HF_USERNAME
 ```
+
+You can also set `HF_SPACE_ID=username_or_org/space_name` to control the exact
+Space repo id. The helper avoids Hugging Face `whoami` unless no namespace is
+provided, because that endpoint is heavily rate-limited.

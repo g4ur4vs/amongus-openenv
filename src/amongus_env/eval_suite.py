@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .engine import AmongUsEngine
 from .golden_episode import run_golden_episode
+from .models import CallMeeting, CompleteTask, Kill, Move, PassMeeting, Vote
 
 Check = dict[str, Any]
 Trace = list[dict[str, Any]]
@@ -19,7 +21,25 @@ EXPECTED_LABELS = [
 
 
 def run_eval_suite() -> dict[str, Any]:
-    return evaluate_trace(run_golden_episode())
+    scenarios = [
+        evaluate_trace(run_golden_episode()),
+        _run_invalid_move_eval(),
+        _run_all_tasks_eval(),
+        _run_meeting_pass_eval(),
+        _run_impostor_parity_eval(),
+        _run_kill_cooldown_eval(),
+    ]
+    passed = sum(1 for scenario in scenarios if scenario["ok"])
+    return {
+        "schema_version": 1,
+        "ok": passed == len(scenarios),
+        "summary": {
+            "scenarios": len(scenarios),
+            "passed": passed,
+            "failed": len(scenarios) - passed,
+        },
+        "scenarios": scenarios,
+    }
 
 
 def evaluate_trace(trace: Trace) -> dict[str, Any]:
@@ -109,6 +129,161 @@ def _check_bot_vote_ejects_false_claimant(trace: Trace) -> Check:
     )
 
 
+def _run_invalid_move_eval() -> dict[str, Any]:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    reset = engine.reset()
+    invalid = engine.step(Move(room="Navigation"))
+    trace = [
+        _record("reset", "reset", reset),
+        _record("invalid_move", "move to Navigation", invalid),
+    ]
+    observation = _step_observation(trace, "invalid_move")
+    return _scenario_result(
+        "invalid_move_no_state_change",
+        trace,
+        [
+            _check(
+                "invalid_move_penalty",
+                observation.get("location") == "Cafeteria"
+                and observation.get("reward") == -0.1
+                and "Invalid move" in observation.get("message_log", [])[-1],
+                f"location={observation.get('location')}; reward={observation.get('reward')}",
+            )
+        ],
+    )
+
+
+def _run_all_tasks_eval() -> dict[str, Any]:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    trace = [_record("reset", "reset", engine.reset())]
+    for label, action_label, action in [
+        ("move_electrical", "move to Electrical", Move(room="Electrical")),
+        ("task_electrical", "complete Electrical task", CompleteTask()),
+        ("move_cafeteria_1", "move to Cafeteria", Move(room="Cafeteria")),
+        ("move_medbay", "move to MedBay", Move(room="MedBay")),
+        ("task_medbay", "complete MedBay task", CompleteTask()),
+        ("move_cafeteria_2", "move to Cafeteria", Move(room="Cafeteria")),
+        ("move_admin", "move to Admin", Move(room="Admin")),
+        ("task_admin", "complete Admin task", CompleteTask()),
+    ]:
+        trace.append(_record(label, action_label, engine.step(action)))
+    final = _step_observation(trace, "task_admin")
+    return _scenario_result(
+        "crewmate_task_route",
+        trace,
+        [
+            _check(
+                "controlled_crewmate_tasks_complete",
+                final.get("done") is False
+                and final.get("winner") is None
+                and final.get("phase") == "tasks"
+                and final.get("reward") == 0.2
+                and all(task.get("completed") for task in final.get("task_list", [])),
+                f"reward={final.get('reward')}; winner={final.get('winner')}",
+            )
+        ],
+    )
+
+
+def _run_meeting_pass_eval() -> dict[str, Any]:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    trace = [
+        _record("reset", "reset", engine.reset()),
+        _record("call_meeting", "call meeting", engine.step(CallMeeting())),
+        _record("pass_meeting", "pass meeting", engine.step(PassMeeting())),
+        _record("vote_blue", "vote blue", engine.step(Vote(target_id="blue"))),
+    ]
+    passed = _step_observation(trace, "pass_meeting")
+    vote = _step_observation(trace, "vote_blue")
+    return _scenario_result(
+        "meeting_pass_no_majority",
+        trace,
+        [
+            _check(
+                "pass_opens_voting",
+                passed.get("voting_open") is True
+                and passed.get("meeting_turns_remaining") == 0
+                and passed.get("reward") == 0.0,
+                f"voting={passed.get('voting_open')}; reward={passed.get('reward')}",
+            ),
+            _check(
+                "vote_without_bot_support_no_majority",
+                vote.get("reward") == 0.0
+                and vote.get("done") is False
+                and vote.get("phase") == "tasks"
+                and vote.get("message_log", [])[-1:] == ["No majority; nobody ejected"],
+                f"reward={vote.get('reward')}; last_message={vote.get('message_log', [])[-1:]}",
+            ),
+        ],
+    )
+
+
+def _run_impostor_parity_eval() -> dict[str, Any]:
+    engine = AmongUsEngine(
+        seed=1,
+        impostor_ids=["red"],
+        player_ids=["red", "blue", "green"],
+    )
+    trace = [
+        _record("reset", "reset", engine.reset()),
+        _record("kill_blue", "kill blue", engine.step(Kill(target_id="blue"))),
+    ]
+    final = _step_observation(trace, "kill_blue")
+    return _scenario_result(
+        "impostor_parity_win",
+        trace,
+        [
+            _check(
+                "kill_plus_parity_win",
+                final.get("done") is True
+                and final.get("winner") == "impostors"
+                and final.get("reward") == 1.5,
+                f"reward={final.get('reward')}; winner={final.get('winner')}",
+            )
+        ],
+    )
+
+
+def _run_kill_cooldown_eval() -> dict[str, Any]:
+    engine = AmongUsEngine(seed=1, impostor_ids=["red"])
+    trace = [
+        _record("reset", "reset", engine.reset()),
+        _record("kill_blue", "kill blue", engine.step(Kill(target_id="blue"))),
+        _record("kill_green", "kill green", engine.step(Kill(target_id="green"))),
+    ]
+    first = _step_observation(trace, "kill_blue")
+    second = _step_observation(trace, "kill_green")
+    return _scenario_result(
+        "kill_cooldown_blocks_second_kill",
+        trace,
+        [
+            _check(
+                "second_kill_blocked_by_cooldown",
+                first.get("reward") == 0.5
+                and second.get("reward") == -0.1
+                and second.get("message_log", [])[-1:] == ["Kill is on cooldown"],
+                f"first={first.get('reward')}; second={second.get('reward')}",
+            )
+        ],
+    )
+
+
+def _scenario_result(episode: str, trace: Trace, checks: list[Check]) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "episode": episode,
+        "ok": all(check["ok"] for check in checks),
+        "summary": {
+            "steps": len(trace),
+            "total_reward": round(
+                sum(_observation(step).get("reward", 0.0) for step in trace),
+                10,
+            ),
+        },
+        "checks": checks,
+    }
+
+
 def _check(check_id: str, ok: bool, detail: str) -> Check:
     return {"id": check_id, "ok": ok, "detail": detail}
 
@@ -123,6 +298,14 @@ def _step_observation(trace: Trace, label: str) -> dict[str, Any]:
 def _observation(step: dict[str, Any]) -> dict[str, Any]:
     observation = step.get("observation")
     return observation if isinstance(observation, dict) else {}
+
+
+def _record(label: str, action: str, observation: Any) -> dict[str, Any]:
+    return {
+        "label": label,
+        "action": action,
+        "observation": observation.model_dump(mode="json"),
+    }
 
 
 def main() -> None:

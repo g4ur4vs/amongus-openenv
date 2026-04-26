@@ -5,7 +5,7 @@ from amongus_env.golden_episode import run_golden_episode
 
 
 def test_eval_suite_scores_current_golden_trace() -> None:
-    result = run_eval_suite()
+    result = evaluate_trace(run_golden_episode())
 
     assert result["schema_version"] == 1
     assert result["ok"] is True
@@ -20,6 +20,26 @@ def test_eval_suite_scores_current_golden_trace() -> None:
         "bot_vote_ejects_false_claimant",
     ]
     assert all(check["ok"] for check in result["checks"])
+
+
+def test_eval_suite_runs_multiple_baseline_scenarios() -> None:
+    result = run_eval_suite()
+
+    assert result["schema_version"] == 1
+    assert result["ok"] is True
+    assert result["summary"] == {
+        "scenarios": 6,
+        "passed": 6,
+        "failed": 0,
+    }
+    assert [scenario["episode"] for scenario in result["scenarios"]] == [
+        "golden_false_alibi",
+        "invalid_move_no_state_change",
+        "crewmate_task_route",
+        "meeting_pass_no_majority",
+        "impostor_parity_win",
+        "kill_cooldown_blocks_second_kill",
+    ]
 
 
 def test_eval_suite_fails_mutated_trace() -> None:
@@ -79,4 +99,4 @@ def test_eval_suite_cli_prints_valid_json(capsys) -> None:
     result = json.loads(capsys.readouterr().out)
 
     assert result["ok"] is True
-    assert result["checks"]
+    assert result["scenarios"]

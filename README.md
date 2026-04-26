@@ -65,6 +65,26 @@ The eval currently runs six deterministic scenarios: golden false alibi, invalid
 movement, crewmate task route, meeting pass/bot-majority, impostor parity win,
 and kill cooldown blocking.
 
+## OpenEnv Server
+
+Run the OpenEnv HTTP server locally after installing the package:
+
+```bash
+uvicorn amongus_env.openenv_server:app --host 0.0.0.0 --port 8000
+```
+
+Build and run the dedicated OpenEnv server image:
+
+```bash
+docker build -f Dockerfile.openenv -t amongus-openenv:latest .
+docker run --rm -p 8000:8000 amongus-openenv:latest
+```
+
+The Gradio Space app is separate from the OpenEnv HTTP server.
+The server uses upstream OpenEnv's app factory when that API is installed; with
+the current PyPI `openenv` package it serves the same `/health`, `/reset`, and
+`/step` contract through an in-repo FastAPI fallback.
+
 ## Hugging Face Space
 
 The repo includes a Gradio `app.py` for a Space. It exposes buttons for the

@@ -25,10 +25,10 @@ def test_openenv_environment_accepts_action_payloads() -> None:
     assert observation.location == "Electrical"
 
 
-def test_http_app_factory_reports_missing_openenv_dependency() -> None:
+def test_http_app_factory_reports_missing_http_dependency_or_returns_app() -> None:
     try:
         app = create_http_app()
     except RuntimeError as exc:
-        assert "openenv" in str(exc).lower()
+        assert "fastapi" in str(exc).lower() or "openenv" in str(exc).lower()
     else:
         assert app is not None

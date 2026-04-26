@@ -7,6 +7,11 @@ from .engine import AmongUsEngine
 from .models import Action, ActionAdapter, Observation
 
 try:
+    from fastapi import FastAPI
+except Exception:  # pragma: no cover - depends on optional runtime install
+    FastAPI = None
+
+try:
     from openenv.core.env_server import create_app as _create_app
 except Exception:  # pragma: no cover - depends on optional runtime install
     _create_app = None
@@ -62,9 +67,46 @@ class AmongUsEnvironment(_Environment):
 
 
 def create_http_app(environment: Optional[AmongUsEnvironment] = None) -> Any:
-    if _create_app is None:
-        raise RuntimeError("openenv is required to create the HTTP app")
-    return _create_app(environment or AmongUsEnvironment(), Action, Observation)
+    environment = environment or AmongUsEnvironment()
+    if _create_app is not None:
+        return _create_app(environment, Action, Observation)
+    return _create_fallback_app(environment)
 
 
-app = create_http_app() if _create_app is not None else None
+def _create_fallback_app(environment: AmongUsEnvironment) -> Any:
+    if FastAPI is None:
+        raise RuntimeError("fastapi is required to create the fallback HTTP app")
+
+    app = FastAPI(title="Among Us OpenEnv")
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.post("/reset")
+    def reset() -> dict[str, Any]:
+        observation = environment.reset()
+        return _http_result(observation, environment)
+
+    @app.post("/step")
+    def step(payload: dict[str, Any]) -> dict[str, Any]:
+        action_payload = payload.get("action", payload)
+        observation = environment.step(action_payload)
+        return _http_result(observation, environment)
+
+    return app
+
+
+def _http_result(observation: Observation, environment: AmongUsEnvironment) -> dict[str, Any]:
+    return {
+        "observation": observation.model_dump(mode="json"),
+        "reward": observation.reward,
+        "done": observation.done,
+        "state": environment.state,
+    }
+
+
+try:
+    app = create_http_app()
+except RuntimeError:  # pragma: no cover - allows model-only installs
+    app = None

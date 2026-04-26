@@ -170,6 +170,17 @@ python -m amongus_env.grpo_train \
 For a tiny-but-real instruct model, change `MODEL_ID` in the Colab script to
 `HuggingFaceTB/SmolLM2-135M-Instruct`.
 
+Generate the judge-facing baseline-vs-RL artifact after training:
+
+```bash
+python -m amongus_env.training_report \
+  --train-json rl_train.json > baseline_vs_rl_report.json
+```
+
+This report is deliberately honest: it records baseline env eval, GRPO training
+status, saved checkpoint presence, and states that no policy-improvement score
+is claimed until a checkpoint-driven model-policy evaluator exists.
+
 ## OpenEnv Server
 
 Run the OpenEnv HTTP server locally after installing the package:

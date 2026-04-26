@@ -81,7 +81,7 @@ MODEL_ID = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
 # MODEL_ID = "HuggingFaceTB/SmolLM2-135M-Instruct"
 OUTPUT_DIR = "outputs/colab-grpo-tiny"
 
-run(f"{sys.executable} -m amongus_env.eval_suite")
+run(f"{sys.executable} -m amongus_env.eval_suite > baseline_eval.json")
 
 # %%
 train_command = (
@@ -90,7 +90,7 @@ train_command = (
     f"--model-id {MODEL_ID} "
     f"--output-dir {OUTPUT_DIR}"
 )
-run(train_command)
+run(f"{train_command} > rl_train.json")
 
 # %%
 status_path = Path(OUTPUT_DIR)
@@ -99,3 +99,10 @@ print("output_files:", sorted(path.name for path in status_path.glob("*"))[:20])
 final_model_path = status_path / "final_model"
 print("final_model_exists:", final_model_path.exists())
 print("final_model_files:", sorted(path.name for path in final_model_path.glob("*"))[:20])
+
+# %%
+run(
+    f"{sys.executable} -m amongus_env.training_report "
+    "--train-json rl_train.json > baseline_vs_rl_report.json"
+)
+print(Path("baseline_vs_rl_report.json").read_text())

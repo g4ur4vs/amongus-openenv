@@ -12,3 +12,4 @@ def test_pyproject_declares_eval_console_scripts() -> None:
     assert 'amongus-deception-elo = "amongus_env.deception_elo:main"' in pyproject
     assert 'amongus-grpo-train = "amongus_env.grpo_train:main"' in pyproject
     assert 'amongus-deception-leaderboard = "amongus_env.deception_leaderboard:main"' in pyproject
+    assert 'amongus-training-report = "amongus_env.training_report:main"' in pyproject

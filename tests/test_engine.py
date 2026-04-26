@@ -1,0 +1,259 @@
+from amongus_env.engine import AmongUsEngine
+from amongus_env.models import (
+    CallMeeting,
+    ClaimKind,
+    CompleteTask,
+    Kill,
+    Move,
+    PassMeeting,
+    Phase,
+    PlayerRole,
+    ReportBody,
+    Speak,
+    Vote,
+    Winner,
+)
+
+
+def test_reset_is_deterministic_and_spawns_in_cafeteria() -> None:
+    first = AmongUsEngine(seed=7, impostor_ids=["blue"]).reset()
+    second = AmongUsEngine(seed=7, impostor_ids=["blue"]).reset()
+
+    assert first == second
+    assert first.role is PlayerRole.CREWMATE
+    assert first.location == "Cafeteria"
+    assert first.phase is Phase.TASKS
+    assert "Match reset" in first.message_log[-1]
+
+
+def test_invalid_movement_is_penalized_without_changing_location() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+
+    observation = engine.step(Move(room="Navigation"))
+
+    assert observation.location == "Cafeteria"
+    assert observation.reward == -0.1
+    assert "Invalid move" in observation.message_log[-1]
+
+
+def test_location_history_tracks_reset_and_valid_moves_only() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+
+    engine.step(Move(room="Electrical"))
+    engine.step(Move(room="Navigation"))
+
+    assert engine.location_history["red"] == ["Cafeteria", "Electrical"]
+    assert engine.location_history["blue"] == ["Cafeteria"]
+
+
+def test_visibility_only_includes_living_players_in_same_room() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(Move(room="Electrical"))
+
+    engine.players["blue"].location = "Electrical"
+    engine.players["green"].location = "MedBay"
+    engine.players["yellow"].location = "Electrical"
+    engine.players["yellow"].alive = False
+
+    observation = engine.observe()
+
+    assert observation.visible_players == ["blue"]
+
+
+def test_crewmate_completes_current_room_task_for_dense_reward() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(Move(room="Electrical"))
+
+    observation = engine.step(CompleteTask())
+
+    assert observation.reward == 0.2
+    assert observation.task_list[0].completed is True
+    assert "Completed task" in observation.message_log[-1]
+
+
+def test_impostor_kill_marks_body_and_rewards_controlled_impostor() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["red"])
+    engine.reset()
+    engine.players["blue"].location = "Cafeteria"
+
+    observation = engine.step(Kill(target_id="blue"))
+
+    assert observation.reward == 0.5
+    assert engine.players["blue"].alive is False
+    assert "blue" in engine.dead_bodies
+    assert "Killed blue" in observation.message_log[-1]
+
+
+def test_report_body_enters_meeting_phase() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["red"])
+    engine.reset()
+    engine.step(Kill(target_id="blue"))
+
+    observation = engine.step(ReportBody())
+
+    assert observation.phase is Phase.MEETING
+    assert observation.voting_open is False
+    assert observation.meeting_turns_remaining == 1
+    assert "Reported body" in observation.message_log[-1]
+
+
+def test_vote_before_discussion_turn_is_illegal() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+
+    observation = engine.step(Vote(target_id="blue"))
+
+    assert observation.reward == -0.1
+    assert observation.phase is Phase.MEETING
+    assert observation.voting_open is False
+    assert observation.meeting_turns_remaining == 1
+    assert "Cannot vote before discussion" in observation.message_log[-1]
+
+
+def test_pass_opens_voting_without_claim_reward() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+
+    observation = engine.step(PassMeeting())
+
+    assert observation.reward == 0.0
+    assert observation.phase is Phase.MEETING
+    assert observation.voting_open is True
+    assert observation.meeting_turns_remaining == 0
+    assert observation.discussion_log[-1] == "red: pass"
+
+
+def test_meeting_speech_parses_self_location_claim() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(Move(room="Electrical"))
+    engine.step(CallMeeting())
+
+    observation = engine.step(Speak(message="I was in Electrical"))
+
+    assert observation.discussion_log[-1] == "red: I was in Electrical"
+    assert observation.claims[-1].kind is ClaimKind.SELF_LOCATION
+    assert observation.claims[-1].speaker_id == "red"
+    assert observation.claims[-1].room == "Electrical"
+    assert observation.claims[-1].truth_value is True
+    assert observation.voting_open is True
+    assert observation.meeting_turns_remaining == 0
+
+
+def test_meeting_speech_parses_saw_player_claim() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.players["blue"].location = "MedBay"
+    engine.location_history["blue"].append("MedBay")
+    engine.step(CallMeeting())
+
+    observation = engine.step(Speak(message="I saw blue in MedBay"))
+
+    assert observation.claims[-1].kind is ClaimKind.SAW_PLAYER
+    assert observation.claims[-1].target_id == "blue"
+    assert observation.claims[-1].room == "MedBay"
+    assert observation.claims[-1].truth_value is True
+
+
+def test_speaking_outside_meeting_is_illegal() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+
+    observation = engine.step(Speak(message="I was in Cafeteria"))
+
+    assert observation.reward == -0.1
+    assert "Cannot speak outside meeting" in observation.message_log[-1]
+
+
+def test_pass_outside_meeting_is_illegal() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+
+    observation = engine.step(PassMeeting())
+
+    assert observation.reward == -0.1
+    assert observation.phase is Phase.TASKS
+    assert observation.voting_open is False
+    assert observation.meeting_turns_remaining == 0
+    assert "Cannot pass outside meeting" in observation.message_log[-1]
+
+
+def test_speak_after_voting_opens_is_illegal() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+    engine.step(PassMeeting())
+
+    observation = engine.step(Speak(message="I was in Cafeteria"))
+
+    assert observation.reward == -0.1
+    assert observation.voting_open is True
+    assert "Voting is already open" in observation.message_log[-1]
+
+
+def test_false_self_location_claim_gets_hallucination_penalty() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+
+    observation = engine.step(Speak(message="I was in Electrical"))
+
+    assert observation.reward == -1.0
+    assert observation.claims[-1].truth_value is False
+
+
+def test_single_vote_without_bot_support_ejects_nobody() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+    engine.step(PassMeeting())
+
+    observation = engine.step(Vote(target_id="blue"))
+
+    assert observation.reward == 0.0
+    assert engine.players["blue"].ejected is False
+    assert observation.done is False
+    assert "No majority" in observation.message_log[-1]
+
+
+def test_bot_votes_eject_speaker_caught_in_false_alibi() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+    engine.step(Speak(message="I was in Electrical"))
+
+    observation = engine.step(Vote(target_id="blue"))
+
+    assert engine.players["red"].ejected is True
+    assert observation.reward == -0.5
+    assert "Ejected red" in observation.message_log[-1]
+
+
+def test_majority_voting_tie_ejects_nobody() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"], player_ids=["red", "blue", "green"])
+    engine.reset()
+    engine.step(CallMeeting())
+    engine.step(PassMeeting())
+
+    observation = engine.step(Vote(target_id="blue"))
+
+    assert engine.players["blue"].ejected is False
+    assert observation.phase is Phase.TASKS
+    assert "No majority" in observation.message_log[-1]
+
+
+def test_impostors_win_when_they_reach_parity() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["red"], player_ids=["red", "blue", "green"])
+    engine.reset()
+
+    observation = engine.step(Kill(target_id="blue"))
+
+    assert observation.done is True
+    assert observation.winner is Winner.IMPOSTORS
+    assert observation.reward == 1.5

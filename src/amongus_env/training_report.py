@@ -134,7 +134,11 @@ def _pending_status(training_summary: dict[str, Any]) -> dict[str, dict[str, str
         },
         "real_trained_model_system": {
             "status": "partial" if training_summary["checkpoint_saved"] else "not_done",
-            "detail": "Tiny checkpoint saved." if training_summary["checkpoint_saved"] else "No saved checkpoint in the provided train JSON.",
+            "detail": (
+                "Tiny checkpoint saved and policy evaluator can score checkpoints."
+                if training_summary["checkpoint_saved"]
+                else "No saved checkpoint in the provided train JSON."
+            ),
         },
         "learned_bots": {
             "status": "not_done",

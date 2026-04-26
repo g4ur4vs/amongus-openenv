@@ -174,6 +174,10 @@ For a tiny-but-real instruct model, change `MODEL_ID` in the Colab script to
 Generate the judge-facing baseline-vs-RL artifact after training:
 
 ```bash
+python -m amongus_env.policy_eval \
+  --checkpoint outputs/colab-grpo-tiny/final_model \
+  > policy_eval.json
+
 python -m amongus_env.training_report \
   --train-json rl_train.json \
   --policy-eval-json policy_eval.json > baseline_vs_rl_report.json

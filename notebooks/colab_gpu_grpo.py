@@ -110,7 +110,7 @@ run(
 )
 run(
     f"{sys.executable} -m amongus_env.policy_eval "
-    "--rl-completions-file rl_completion_actions.jsonl "
+    f"--checkpoint {final_model_path} "
     "> policy_eval.json"
 )
 run(

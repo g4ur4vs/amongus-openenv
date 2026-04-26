@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from .completion_rollout import run_completion_rollout
 
@@ -15,6 +15,8 @@ SCRIPTED_BASELINE_COMPLETION = """
 
 def build_policy_eval_report(
     rl_completions: Optional[list[str]] = None,
+    checkpoint: Optional[str] = None,
+    completion_generator: Optional[Callable[[str, str, int], str]] = None,
     num_episodes: int = 1,
     seed_start: int = 1,
     max_actions: int = 16,
@@ -26,7 +28,22 @@ def build_policy_eval_report(
         max_actions=max_actions,
     )
     rl = None
-    if rl_completions is not None:
+    if checkpoint is not None:
+        rl = _evaluate_completions(
+            [
+                generate_checkpoint_completion(
+                    checkpoint,
+                    prompt=_policy_prompt(),
+                    generator=completion_generator,
+                )
+                for _ in range(num_episodes)
+            ],
+            policy_name="checkpoint_completion",
+            seed_start=seed_start,
+            max_actions=max_actions,
+            checkpoint=checkpoint,
+        )
+    elif rl_completions is not None:
         rl = _evaluate_completions(
             _repeat_to_length(rl_completions, num_episodes),
             policy_name="completion_policy",
@@ -52,6 +69,7 @@ def _evaluate_completions(
     policy_name: str,
     seed_start: int,
     max_actions: int,
+    checkpoint: Optional[str] = None,
 ) -> dict[str, Any]:
     episodes = []
     for index, completion in enumerate(completions):
@@ -73,12 +91,43 @@ def _evaluate_completions(
         sum(episode["episode_return"] for episode in episodes) / len(episodes),
         10,
     )
-    return {
+    result = {
         "ok": True,
         "policy": policy_name,
         "average_episode_return": average,
         "episodes": episodes,
     }
+    if checkpoint is not None:
+        result["checkpoint"] = checkpoint
+    return result
+
+
+def generate_checkpoint_completion(
+    checkpoint: str,
+    prompt: str,
+    max_new_tokens: int = 128,
+    generator: Optional[Callable[[str, str, int], str]] = None,
+) -> str:
+    if generator is not None:
+        return generator(checkpoint, prompt, max_new_tokens)
+    try:
+        from transformers import pipeline
+    except Exception as exc:  # pragma: no cover - optional training dependency
+        raise ImportError('Install policy eval deps with: pip install -e ".[training]"') from exc
+
+    pipe = pipeline(
+        "text-generation",
+        model=checkpoint,
+        tokenizer=checkpoint,
+        device_map="auto",
+    )
+    output = pipe(
+        prompt,
+        max_new_tokens=max_new_tokens,
+        do_sample=False,
+        return_full_text=False,
+    )
+    return str(output[0]["generated_text"])
 
 
 def _comparison(
@@ -109,9 +158,18 @@ def _read_completions(path: Path) -> list[str]:
     return [text]
 
 
+def _policy_prompt() -> str:
+    return (
+        "Emit only JSON Lines for Among Us actions. Example:\n"
+        '{"type": "move", "room": "Electrical"}\n'
+        '{"type": "complete_task"}\n'
+    )
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Evaluate baseline vs RL policy completions")
     parser.add_argument("--rl-completions-file", type=Path, default=None)
+    parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--num-episodes", type=int, default=1)
     parser.add_argument("--seed-start", type=int, default=1)
     parser.add_argument("--max-actions", type=int, default=16)
@@ -125,6 +183,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         json.dumps(
             build_policy_eval_report(
                 rl_completions=completions,
+                checkpoint=args.checkpoint,
                 num_episodes=args.num_episodes,
                 seed_start=args.seed_start,
                 max_actions=args.max_actions,

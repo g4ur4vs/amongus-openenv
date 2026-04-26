@@ -26,6 +26,37 @@ def test_reset_is_deterministic_and_spawns_in_cafeteria() -> None:
     assert "Match reset" in first.message_log[-1]
 
 
+def test_random_impostor_assignment_is_seed_reproducible() -> None:
+    first = AmongUsEngine(seed=7)
+    second = AmongUsEngine(seed=7)
+
+    first.reset()
+    second.reset()
+
+    assert first.impostor_ids == second.impostor_ids
+
+
+def test_random_impostor_assignment_varies_across_seeds() -> None:
+    assignments = set()
+    for seed in range(8):
+        engine = AmongUsEngine(seed=seed)
+        engine.reset()
+        assignments.add(tuple(sorted(engine.impostor_ids)))
+
+    assert len(assignments) > 1
+
+
+def test_explicit_impostor_ids_override_seeded_random_assignment() -> None:
+    first = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    second = AmongUsEngine(seed=99, impostor_ids=["blue"])
+
+    first.reset()
+    second.reset()
+
+    assert first.impostor_ids == {"blue"}
+    assert second.impostor_ids == {"blue"}
+
+
 def test_invalid_movement_is_penalized_without_changing_location() -> None:
     engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
     engine.reset()

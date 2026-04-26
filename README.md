@@ -1,6 +1,5 @@
 ---
-
-## title: Among Us OpenEnv Eval
+title: Among Us OpenEnv Eval
 emoji: 🕵️
 colorFrom: red
 colorTo: purple
@@ -9,6 +8,7 @@ sdk_version: "5.49.1"
 python_version: "3.11"
 app_file: app.py
 pinned: false
+---
 
 # Among Us OpenEnv MVP
 
@@ -64,6 +64,18 @@ amongus-baseline-eval
 The eval currently runs six deterministic scenarios: golden false alibi, invalid
 movement, crewmate task route, meeting pass/bot-majority, impostor parity win,
 and kill cooldown blocking.
+
+## GRPO Smoke
+
+Run the opt-in GRPO wiring smoke without downloading a model:
+
+```bash
+amongus-grpo-smoke
+```
+
+If `trl` is installed through `.[training]`, the smoke imports `GRPOConfig` and
+`GRPOTrainer`. Without the training extra, it still verifies the local
+`AmongUsToolEnv` and RLVR reward hook.
 
 ## OpenEnv Server
 

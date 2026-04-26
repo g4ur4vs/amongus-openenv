@@ -18,6 +18,7 @@ dependencies = [
 [project.scripts]
 amongus-baseline-eval = "amongus_env.eval_suite:main"
 amongus-golden-trace = "amongus_env.golden_episode:main"
+amongus-grpo-smoke = "amongus_env.grpo_smoke:main"
 
 [project.optional-dependencies]
 training = [

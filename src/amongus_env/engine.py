@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import random
 from collections import Counter
 from typing import Iterable, Optional
 
@@ -56,7 +57,10 @@ class AmongUsEngine:
             controlled_player_id=controlled_player_id,
             player_ids=player_ids or ["red", "blue", "green", "yellow"],
         )
-        self.impostor_ids = set(impostor_ids or ["blue"])
+        self._explicit_impostor_ids = impostor_ids is not None
+        self._rng = random.Random(seed)
+        self.impostor_count = 1
+        self.impostor_ids = set(impostor_ids or [])
         self.players: dict[str, PlayerState] = {}
         self.tasks_by_player: dict[str, list[TaskState]] = {}
         self.location_history: dict[str, list[str]] = {}
@@ -77,6 +81,10 @@ class AmongUsEngine:
         return self.players[self.config.controlled_player_id]
 
     def reset(self) -> Observation:
+        if not self._explicit_impostor_ids:
+            self.impostor_ids = set(
+                self._rng.sample(self.config.player_ids, k=self.impostor_count)
+            )
         self.players = {}
         self.tasks_by_player = {}
         self.location_history = {}

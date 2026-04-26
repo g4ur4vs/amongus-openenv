@@ -236,6 +236,56 @@ def test_trainer_probe_runs_train_only_when_explicitly_requested(tmp_path) -> No
     assert calls == ["train"]
 
 
+def test_trainer_probe_saves_final_model_when_requested(tmp_path) -> None:
+    model_dir = tmp_path / "tiny-local-model"
+    model_dir.mkdir()
+    (model_dir / "config.json").write_text("{}")
+    output_dir = tmp_path / "output"
+    calls = []
+
+    class FakeDataset:
+        @staticmethod
+        def from_list(rows):
+            return rows
+
+    class FakeConfig:
+        def __init__(self, **kwargs):
+            pass
+
+    class FakeModel:
+        def save_pretrained(self, path):
+            calls.append(("model", path))
+
+    class FakeProcessingClass:
+        def save_pretrained(self, path):
+            calls.append(("processing", path))
+
+    class FakeTrainer:
+        def __init__(self, **kwargs):
+            self.model = FakeModel()
+            self.processing_class = FakeProcessingClass()
+
+        def train(self):
+            return {"train_loss": 0.0}
+
+    result = run_grpo_trainer_probe(
+        local_model_path=str(model_dir),
+        output_dir=str(output_dir),
+        dataset_cls=FakeDataset,
+        grpo_config_cls=FakeConfig,
+        grpo_trainer_cls=FakeTrainer,
+        train=True,
+        save_trained_model=True,
+    )
+
+    assert result["ok"] is True
+    assert result["saved_model_path"] == str(output_dir / "final_model")
+    assert calls == [
+        ("model", str(output_dir / "final_model")),
+        ("processing", str(output_dir / "final_model")),
+    ]
+
+
 def test_grpo_train_cli_prints_valid_json(capsys) -> None:
     main([])
 

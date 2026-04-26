@@ -13,14 +13,40 @@
 # %%
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
 
 
-def run(command: str) -> None:
+def run(
+    command: str,
+    *,
+    quiet: bool = False,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
     print(f"$ {command}")
-    subprocess.run(command, shell=True, check=True)
+    result = subprocess.run(
+        command,
+        shell=True,
+        text=True,
+        capture_output=True,
+        cwd=str(cwd) if cwd is not None else None,
+    )
+    if not quiet and result.stdout:
+        print(result.stdout)
+    if result.returncode != 0:
+        if result.stderr:
+            print(result.stderr)
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            command,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+    if not quiet and result.stderr:
+        print(result.stderr)
+    return result
 
 
 # %%
@@ -29,11 +55,20 @@ run("nvidia-smi")
 # %%
 REPO_URL = "https://github.com/g4ur4vs/amongus-openenv.git"
 BRANCH = "main"
-WORKDIR = Path("/content/amongus-openenv")
+BASE_DIR = Path("/content") if Path("/content").exists() else Path.cwd()
+WORKDIR = BASE_DIR / "amongus-openenv"
 
+BASE_DIR.mkdir(parents=True, exist_ok=True)
+os.chdir(BASE_DIR)
 if WORKDIR.exists():
-    run(f"rm -rf {WORKDIR}")
-run(f"git clone --depth 1 --branch {BRANCH} {REPO_URL} {WORKDIR}")
+    run(f"rm -rf {shlex.quote(str(WORKDIR))}", cwd=BASE_DIR)
+run(
+    "git clone "
+    f"--depth 1 --branch {shlex.quote(BRANCH)} "
+    f"{shlex.quote(REPO_URL)} "
+    f"{shlex.quote(str(WORKDIR))}",
+    cwd=BASE_DIR,
+)
 os.chdir(WORKDIR)
 print("cwd:", Path.cwd())
 
@@ -51,7 +86,7 @@ run(f"{sys.executable} -m amongus_env.eval_suite")
 # %%
 train_command = (
     f"{sys.executable} -m amongus_env.grpo_train "
-    "--construct-trainer --train --allow-hub-model "
+    "--construct-trainer --train --save-trained-model --allow-hub-model "
     f"--model-id {MODEL_ID} "
     f"--output-dir {OUTPUT_DIR}"
 )
@@ -61,3 +96,6 @@ run(train_command)
 status_path = Path(OUTPUT_DIR)
 print("output_dir_exists:", status_path.exists())
 print("output_files:", sorted(path.name for path in status_path.glob("*"))[:20])
+final_model_path = status_path / "final_model"
+print("final_model_exists:", final_model_path.exists())
+print("final_model_files:", sorted(path.name for path in final_model_path.glob("*"))[:20])

@@ -110,6 +110,7 @@ def run_grpo_trainer_probe(
     output_dir: str = DEFAULT_OUTPUT_DIR,
     train: bool = False,
     use_cpu: bool = False,
+    save_trained_model: bool = False,
     dataset_cls: Optional[Any] = None,
     grpo_config_cls: Optional[Any] = None,
     grpo_trainer_cls: Optional[Any] = None,
@@ -179,9 +180,17 @@ def run_grpo_trainer_probe(
             train_dataset=train_dataset,
         )
         train_result = None
+        saved_model_path = None
         if train:
             with contextlib.redirect_stdout(io.StringIO()):
                 train_result = trainer.train()
+            if save_trained_model:
+                saved_model_path = str(Path(output_dir) / "final_model")
+                Path(saved_model_path).mkdir(parents=True, exist_ok=True)
+                trainer.model.save_pretrained(saved_model_path)
+                processing_class = getattr(trainer, "processing_class", None)
+                if processing_class is not None:
+                    processing_class.save_pretrained(saved_model_path)
     except Exception as exc:  # pragma: no cover - depends on optional training stack
         return _trainer_probe_result(
             ok=False,
@@ -203,6 +212,7 @@ def run_grpo_trainer_probe(
         model_loaded=True,
         trained=train,
         train_result=str(train_result) if train_result is not None else None,
+        saved_model_path=saved_model_path,
         output_dir=output_dir,
     )
 
@@ -216,6 +226,7 @@ def _trainer_probe_result(
     model_loaded: bool = False,
     trained: bool = False,
     train_result: Optional[str] = None,
+    saved_model_path: Optional[str] = None,
     output_dir: str = DEFAULT_OUTPUT_DIR,
 ) -> dict[str, Any]:
     return {
@@ -229,6 +240,7 @@ def _trainer_probe_result(
         "model_loaded": model_loaded,
         "trained": trained,
         "train_result": train_result,
+        "saved_model_path": saved_model_path,
         "training_spec": build_training_spec(
             model_id=local_model_path or DEFAULT_MODEL_ID,
             output_dir=output_dir,
@@ -318,6 +330,11 @@ def main(argv: Optional[list[str]] = None) -> None:
         action="store_true",
         help="Force CPU training even when GPU/MPS is available.",
     )
+    parser.add_argument(
+        "--save-trained-model",
+        action="store_true",
+        help="After --train, save model/tokenizer artifacts to output_dir/final_model.",
+    )
     args = parser.parse_args(argv)
 
     if args.construct_trainer or args.train:
@@ -328,6 +345,7 @@ def main(argv: Optional[list[str]] = None) -> None:
             output_dir=args.output_dir,
             train=args.train,
             use_cpu=args.use_cpu,
+            save_trained_model=args.save_trained_model,
         )
     else:
         result = run_grpo_dry_run(

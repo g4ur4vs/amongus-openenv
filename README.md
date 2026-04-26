@@ -161,6 +161,7 @@ GRPO training step with the smallest public TRL smoke model:
 python -m amongus_env.grpo_train \
   --construct-trainer \
   --train \
+  --save-trained-model \
   --allow-hub-model \
   --model-id trl-internal-testing/tiny-Qwen2ForCausalLM-2.5 \
   --output-dir outputs/colab-grpo-tiny

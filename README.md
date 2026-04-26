@@ -53,6 +53,15 @@ This is intentionally a reproducible eval artifact, not full GRPO training.
 TRL tool summaries include compact tails of `message_log`, `discussion_log`, and
 `claims`; the full structured values remain available on the `Observation`.
 
+Run the reasoning-log version of the same trace:
+
+```bash
+amongus-reasoning-trace
+```
+
+This adds optional `reasoning.raw`, parsed `reasoning.thought`, and
+`verifications` fields without changing the core `Observation` schema.
+
 ## Eval Suite
 
 Run the pass/fail eval JSON:

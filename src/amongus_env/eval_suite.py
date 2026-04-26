@@ -6,6 +6,7 @@ from typing import Any
 from .engine import AmongUsEngine
 from .golden_episode import run_golden_episode
 from .models import CallMeeting, CompleteTask, Kill, Move, PassMeeting, Vote
+from .trace import record_step
 
 Check = dict[str, Any]
 Trace = list[dict[str, Any]]
@@ -301,11 +302,7 @@ def _observation(step: dict[str, Any]) -> dict[str, Any]:
 
 
 def _record(label: str, action: str, observation: Any) -> dict[str, Any]:
-    return {
-        "label": label,
-        "action": action,
-        "observation": observation.model_dump(mode="json"),
-    }
+    return record_step(label, action, observation)
 
 
 def main() -> None:

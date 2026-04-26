@@ -314,6 +314,20 @@ class AmongUsEngine:
     def _start_meeting_protocol(self) -> None:
         self.voting_open = False
         self.meeting_turns_remaining = 1
+        self._prefill_meeting_discussion()
+
+    def _prefill_meeting_discussion(self) -> None:
+        speaker_ids = sorted(
+            player.player_id
+            for player in self.players.values()
+            if player.player_id != self.controlled_player.player_id
+            and player.alive
+            and not player.ejected
+        )
+        for speaker_id in speaker_ids:
+            entry = f"{speaker_id}: pass"
+            self.discussion_log.append(entry)
+            self.message_log.append(entry)
 
     def _speak(self, message: str) -> float:
         if self.phase is not Phase.MEETING:

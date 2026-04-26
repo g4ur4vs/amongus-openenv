@@ -56,6 +56,41 @@ def test_training_report_is_honest_about_missing_policy_improvement(tmp_path) ->
     assert "model-policy evaluator" in report["baseline_vs_rl"]["reason"]
 
 
+def test_training_report_consumes_policy_eval_json(tmp_path) -> None:
+    train_json = tmp_path / "train.json"
+    train_json.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "trainer_constructed": True,
+                "trained": True,
+                "saved_model_path": None,
+                "train_result": "TrainOutput(global_step=1, training_loss=0.0)",
+            }
+        )
+    )
+    policy_eval_json = tmp_path / "policy_eval.json"
+    policy_eval_json.write_text(
+        json.dumps(
+            {
+                "ok": True,
+                "comparison": {
+                    "baseline_average_episode_return": 0.2,
+                    "rl_average_episode_return": 0.4,
+                    "delta": 0.2,
+                },
+            }
+        )
+    )
+
+    report = build_training_report(train_json, policy_eval_json)
+
+    assert report["baseline_vs_rl"]["rl_metric"] == "average_episode_return"
+    assert report["baseline_vs_rl"]["rl_value"] == 0.4
+    assert report["baseline_vs_rl"]["score_delta"] == 0.2
+    assert report["baseline_vs_rl"]["policy_improvement_claimed"] is True
+
+
 def test_training_report_cli_prints_valid_json(tmp_path, capsys) -> None:
     train_json = tmp_path / "train.json"
     train_json.write_text(

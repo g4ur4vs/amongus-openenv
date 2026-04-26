@@ -24,6 +24,7 @@ amongus-deception-elo = "amongus_env.deception_elo:main"
 amongus-deception-leaderboard = "amongus_env.deception_leaderboard:main"
 amongus-grpo-train = "amongus_env.grpo_train:main"
 amongus-training-report = "amongus_env.training_report:main"
+amongus-policy-eval = "amongus_env.policy_eval:main"
 
 [project.optional-dependencies]
 training = [

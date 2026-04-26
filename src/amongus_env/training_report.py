@@ -24,14 +24,23 @@ def summarize_training_result(train_json_path: Path) -> dict[str, Any]:
     }
 
 
-def build_training_report(train_json_path: Optional[Path] = None) -> dict[str, Any]:
+def build_training_report(
+    train_json_path: Optional[Path] = None,
+    policy_eval_json_path: Optional[Path] = None,
+) -> dict[str, Any]:
     baseline_eval = run_eval_suite()
     training_summary = (
         summarize_training_result(train_json_path)
         if train_json_path is not None
         else _missing_training_summary()
     )
+    policy_eval = (
+        json.loads(policy_eval_json_path.read_text())
+        if policy_eval_json_path is not None
+        else None
+    )
     baseline_pass_rate = _pass_rate(baseline_eval)
+    baseline_vs_rl = _baseline_vs_rl(baseline_pass_rate, policy_eval)
     return {
         "schema_version": 1,
         "ok": baseline_eval["ok"] and training_summary["trained"],
@@ -40,18 +49,8 @@ def build_training_report(train_json_path: Optional[Path] = None) -> dict[str, A
             "pass_rate": baseline_pass_rate,
         },
         "rl_training": training_summary,
-        "baseline_vs_rl": {
-            "baseline_metric": "deterministic_environment_eval_pass_rate",
-            "baseline_value": baseline_pass_rate,
-            "rl_metric": None,
-            "rl_value": None,
-            "score_delta": None,
-            "policy_improvement_claimed": False,
-            "reason": (
-                "GRPO trainer smoke is complete, but there is no model-policy evaluator "
-                "that runs a checkpoint through Among Us episodes yet."
-            ),
-        },
+        "policy_eval": policy_eval,
+        "baseline_vs_rl": baseline_vs_rl,
         "pending_status": _pending_status(training_summary),
     }
 
@@ -74,13 +73,43 @@ def _pass_rate(eval_result: dict[str, Any]) -> float:
     return round(summary["passed"] / summary["scenarios"], 10)
 
 
+def _baseline_vs_rl(
+    baseline_pass_rate: float,
+    policy_eval: Optional[dict[str, Any]],
+) -> dict[str, Any]:
+    if policy_eval is None:
+        return {
+            "baseline_metric": "deterministic_environment_eval_pass_rate",
+            "baseline_value": baseline_pass_rate,
+            "rl_metric": None,
+            "rl_value": None,
+            "score_delta": None,
+            "policy_improvement_claimed": False,
+            "reason": (
+                "GRPO trainer smoke is complete, but there is no model-policy evaluator "
+                "that runs a checkpoint through Among Us episodes yet."
+            ),
+        }
+    comparison = policy_eval.get("comparison", {})
+    delta = comparison.get("delta")
+    return {
+        "baseline_metric": "average_episode_return",
+        "baseline_value": comparison.get("baseline_average_episode_return"),
+        "rl_metric": "average_episode_return",
+        "rl_value": comparison.get("rl_average_episode_return"),
+        "score_delta": delta,
+        "policy_improvement_claimed": bool(policy_eval.get("ok") and delta is not None and delta > 0),
+        "reason": "Policy evaluator JSON supplied; comparison is episode-return based.",
+    }
+
+
 def _pending_status(training_summary: dict[str, Any]) -> dict[str, dict[str, str]]:
     return {
         "real_grpo_training_loop": {
             "status": "partial",
             "detail": (
                 "GRPOTrainer.train() runs and can save a tiny checkpoint; "
-                "the reward is still a trainer smoke reward, not an env rollout reward."
+                "env-rollout reward mode exists for parsed JSON action completions."
             ),
         },
         "episode_return_reward_contract": {
@@ -89,7 +118,7 @@ def _pending_status(training_summary: dict[str, Any]) -> dict[str, dict[str, str
         },
         "better_meeting_simulation": {
             "status": "partial",
-            "detail": "Accusations and richer verifiable claims exist; round-robin NLP is not implemented.",
+            "detail": "Synthetic round-robin preface, accusations, and richer verifiable claims exist; open debate is not implemented.",
         },
         "impostor_fake_tasks": {
             "status": "done",
@@ -138,8 +167,14 @@ def main(argv: Optional[list[str]] = None) -> None:
         default=None,
         help="JSON output captured from amongus-grpo-train.",
     )
+    parser.add_argument(
+        "--policy-eval-json",
+        type=Path,
+        default=None,
+        help="JSON output captured from amongus-policy-eval.",
+    )
     args = parser.parse_args(argv)
-    print(json.dumps(build_training_report(args.train_json), indent=2))
+    print(json.dumps(build_training_report(args.train_json, args.policy_eval_json), indent=2))
 
 
 if __name__ == "__main__":

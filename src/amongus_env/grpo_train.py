@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from .completion_rollout import completion_episode_return_reward_func
 from .trl_adapter import AmongUsToolEnv, reward_from_game_state
 
 DEFAULT_MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
@@ -111,6 +112,7 @@ def run_grpo_trainer_probe(
     train: bool = False,
     use_cpu: bool = False,
     save_trained_model: bool = False,
+    reward_mode: str = "constant",
     dataset_cls: Optional[Any] = None,
     grpo_config_cls: Optional[Any] = None,
     grpo_trainer_cls: Optional[Any] = None,
@@ -173,9 +175,14 @@ def run_grpo_trainer_probe(
             optim="adamw_torch",
             model_init_kwargs={"local_files_only": local_files_only},
         )
+        reward_func = (
+            completion_episode_return_reward_func
+            if reward_mode == "env_rollout"
+            else grpo_constant_reward_func
+        )
         trainer = grpo_trainer_cls(
             model=model_ref,
-            reward_funcs=grpo_constant_reward_func,
+            reward_funcs=reward_func,
             args=args,
             train_dataset=train_dataset,
         )
@@ -213,6 +220,7 @@ def run_grpo_trainer_probe(
         trained=train,
         train_result=str(train_result) if train_result is not None else None,
         saved_model_path=saved_model_path,
+        reward_mode=reward_mode,
         output_dir=output_dir,
     )
 
@@ -227,6 +235,7 @@ def _trainer_probe_result(
     trained: bool = False,
     train_result: Optional[str] = None,
     saved_model_path: Optional[str] = None,
+    reward_mode: str = "constant",
     output_dir: str = DEFAULT_OUTPUT_DIR,
 ) -> dict[str, Any]:
     return {
@@ -239,6 +248,7 @@ def _trainer_probe_result(
         "trainer_constructed": trainer_constructed,
         "model_loaded": model_loaded,
         "trained": trained,
+        "reward_mode": reward_mode,
         "train_result": train_result,
         "saved_model_path": saved_model_path,
         "training_spec": build_training_spec(
@@ -335,6 +345,12 @@ def main(argv: Optional[list[str]] = None) -> None:
         action="store_true",
         help="After --train, save model/tokenizer artifacts to output_dir/final_model.",
     )
+    parser.add_argument(
+        "--reward-mode",
+        choices=["constant", "env_rollout"],
+        default="constant",
+        help="Use constant smoke reward or parsed completion env-rollout reward.",
+    )
     args = parser.parse_args(argv)
 
     if args.construct_trainer or args.train:
@@ -346,6 +362,7 @@ def main(argv: Optional[list[str]] = None) -> None:
             train=args.train,
             use_cpu=args.use_cpu,
             save_trained_model=args.save_trained_model,
+            reward_mode=args.reward_mode,
         )
     else:
         result = run_grpo_dry_run(

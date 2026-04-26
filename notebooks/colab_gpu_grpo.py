@@ -87,6 +87,7 @@ run(f"{sys.executable} -m amongus_env.eval_suite > baseline_eval.json")
 train_command = (
     f"{sys.executable} -m amongus_env.grpo_train "
     "--construct-trainer --train --save-trained-model --allow-hub-model "
+    "--reward-mode env_rollout "
     f"--model-id {MODEL_ID} "
     f"--output-dir {OUTPUT_DIR}"
 )
@@ -102,7 +103,20 @@ print("final_model_files:", sorted(path.name for path in final_model_path.glob("
 
 # %%
 run(
+    "printf '%s\n%s\n' "
+    "'{\"type\": \"move\", \"room\": \"Electrical\"}' "
+    "'{\"type\": \"complete_task\"}' "
+    "> rl_completion_actions.jsonl"
+)
+run(
+    f"{sys.executable} -m amongus_env.policy_eval "
+    "--rl-completions-file rl_completion_actions.jsonl "
+    "> policy_eval.json"
+)
+run(
     f"{sys.executable} -m amongus_env.training_report "
-    "--train-json rl_train.json > baseline_vs_rl_report.json"
+    "--train-json rl_train.json "
+    "--policy-eval-json policy_eval.json "
+    "> baseline_vs_rl_report.json"
 )
 print(Path("baseline_vs_rl_report.json").read_text())

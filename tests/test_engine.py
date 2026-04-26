@@ -182,6 +182,21 @@ def test_report_body_enters_meeting_phase() -> None:
     assert "Reported body" in observation.message_log[-1]
 
 
+def test_meeting_prefills_sorted_non_controlled_speakers() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+
+    observation = engine.step(CallMeeting())
+
+    assert observation.voting_open is False
+    assert observation.meeting_turns_remaining == 1
+    assert observation.discussion_log == [
+        "blue: pass",
+        "green: pass",
+        "yellow: pass",
+    ]
+
+
 def test_vote_before_discussion_turn_is_illegal() -> None:
     engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
     engine.reset()

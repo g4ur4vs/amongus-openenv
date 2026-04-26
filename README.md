@@ -163,6 +163,7 @@ python -m amongus_env.grpo_train \
   --train \
   --save-trained-model \
   --allow-hub-model \
+  --reward-mode env_rollout \
   --model-id trl-internal-testing/tiny-Qwen2ForCausalLM-2.5 \
   --output-dir outputs/colab-grpo-tiny
 ```
@@ -174,12 +175,13 @@ Generate the judge-facing baseline-vs-RL artifact after training:
 
 ```bash
 python -m amongus_env.training_report \
-  --train-json rl_train.json > baseline_vs_rl_report.json
+  --train-json rl_train.json \
+  --policy-eval-json policy_eval.json > baseline_vs_rl_report.json
 ```
 
 This report is deliberately honest: it records baseline env eval, GRPO training
-status, saved checkpoint presence, and states that no policy-improvement score
-is claimed until a checkpoint-driven model-policy evaluator exists.
+status, saved checkpoint presence, and policy-eval episode-return comparison
+when `policy_eval.json` is provided.
 
 ## OpenEnv Server
 

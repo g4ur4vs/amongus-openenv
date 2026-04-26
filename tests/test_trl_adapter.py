@@ -102,8 +102,8 @@ def test_trl_tool_environment_exposes_speak_method() -> None:
     result = tool_env.speak("I was in Electrical")
 
     assert "reward=-1.0" in result
-    assert "message_log=Match reset | Emergency meeting called | red: I was in Electrical" in result
-    assert "discussion_log=red: I was in Electrical" in result
+    assert "message_log=yellow: pass | Emergency meeting called | red: I was in Electrical" in result
+    assert "discussion_log=green: pass | yellow: pass | red: I was in Electrical" in result
     assert "claims=self_location(red in Electrical)=false" in result
     assert tool_env.reward == -1.0
 

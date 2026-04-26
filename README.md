@@ -74,6 +74,16 @@ The eval currently runs six deterministic scenarios: golden false alibi, invalid
 movement, crewmate task route, meeting pass/bot-majority, impostor parity win,
 and kill cooldown blocking.
 
+Run the deterministic Deception Elo metric:
+
+```bash
+amongus-deception-elo
+```
+
+This scores the false self-location claim resolution as deceiver-vs-assembly Elo:
+the deceiver loses Elo when the false claimant is ejected, and gains Elo when a
+different player is ejected.
+
 ## GRPO Smoke
 
 Run the opt-in GRPO wiring smoke without downloading a model:

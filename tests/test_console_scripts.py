@@ -9,3 +9,4 @@ def test_pyproject_declares_eval_console_scripts() -> None:
     assert 'amongus-golden-trace = "amongus_env.golden_episode:main"' in pyproject
     assert 'amongus-grpo-smoke = "amongus_env.grpo_smoke:main"' in pyproject
     assert 'amongus-reasoning-trace = "amongus_env.reasoning_trace:main"' in pyproject
+    assert 'amongus-deception-elo = "amongus_env.deception_elo:main"' in pyproject

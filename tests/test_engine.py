@@ -242,6 +242,19 @@ def test_meeting_speech_parses_self_location_claim() -> None:
     assert observation.meeting_turns_remaining == 0
 
 
+def test_meeting_speech_semantic_parser_handles_fuzzy_self_location() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(Move(room="Electrical"))
+    engine.step(CallMeeting())
+
+    observation = engine.step(Speak(message="uh I was over in Electrcal doing wires"))
+
+    assert observation.claims[-1].kind is ClaimKind.SELF_LOCATION
+    assert observation.claims[-1].room == "Electrical"
+    assert observation.claims[-1].truth_value is True
+
+
 def test_meeting_speech_parses_saw_player_claim() -> None:
     engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
     engine.reset()
@@ -254,6 +267,18 @@ def test_meeting_speech_parses_saw_player_claim() -> None:
     assert observation.claims[-1].kind is ClaimKind.SAW_PLAYER
     assert observation.claims[-1].target_id == "blue"
     assert observation.claims[-1].room == "MedBay"
+    assert observation.claims[-1].truth_value is True
+
+
+def test_meeting_speech_semantic_parser_handles_sus_accusation() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+
+    observation = engine.step(Speak(message="blue is super sus, vote them"))
+
+    assert observation.claims[-1].kind is ClaimKind.ACCUSE_IMPOSTOR
+    assert observation.claims[-1].target_id == "blue"
     assert observation.claims[-1].truth_value is True
 
 
@@ -275,6 +300,19 @@ def test_meeting_speech_parses_true_vent_claim() -> None:
     assert observation.claims[-1].kind is ClaimKind.SAW_VENT
     assert observation.claims[-1].target_id == "red"
     assert observation.claims[-1].truth_value is True
+
+
+def test_meeting_speech_semantic_parser_handles_vent_accusation() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+
+    observation = engine.step(Speak(message="blue vented near cafe"))
+
+    assert observation.reward == -1.0
+    assert observation.claims[-1].kind is ClaimKind.SAW_VENT
+    assert observation.claims[-1].target_id == "blue"
+    assert observation.claims[-1].truth_value is False
 
 
 def test_false_vent_claim_gets_hallucination_penalty() -> None:

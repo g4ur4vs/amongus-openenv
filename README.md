@@ -107,6 +107,18 @@ The environment now includes a small but verifiable deception surface:
 - `Speak("I saw red vent")` is parsed as a verifiable `saw_vent` claim.
 - `Speak("I accuse blue")` is parsed as a verifiable accusation; bots can follow
   true accusations when no higher-priority false verifiable claim exists.
+- A deterministic semantic fallback also handles clearer natural variants like
+  `blue is sus`, `blue vented`, and `I was over in Electrcal`; unsupported or
+  ambiguous claims are ignored instead of guessed.
+
+Train the lightweight supervised bot-vote policy artifact:
+
+```bash
+amongus-train-learned-bots --output outputs/learned-bots.json
+```
+
+This is behavior cloning over synthetic expert vote labels, not an RL-trained
+dialogue population.
 
 ## GRPO Training Skeleton
 

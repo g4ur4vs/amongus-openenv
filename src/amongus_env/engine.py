@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import random
 from collections import Counter
+from difflib import get_close_matches
 from typing import Iterable, Optional
 
 from .models import (
@@ -59,6 +60,7 @@ class AmongUsEngine:
         controlled_player_id: str = "red",
         player_ids: Optional[list[str]] = None,
         impostor_ids: Optional[Iterable[str]] = None,
+        bot_vote_policy: Optional[object] = None,
     ) -> None:
         self.config = GameConfig(
             seed=seed,
@@ -69,6 +71,7 @@ class AmongUsEngine:
         self._rng = random.Random(seed)
         self.impostor_count = 1
         self.impostor_ids = set(impostor_ids or [])
+        self.bot_vote_policy = bot_vote_policy
         self.players: dict[str, PlayerState] = {}
         self.tasks_by_player: dict[str, list[TaskState]] = {}
         self.location_history: dict[str, list[str]] = {}
@@ -432,6 +435,88 @@ class AmongUsEngine:
                 truth_value=target is not None and target.role is PlayerRole.IMPOSTOR,
             )
 
+        return self._parse_semantic_claim(speaker_id=speaker_id, message=message)
+
+    def _parse_semantic_claim(self, speaker_id: str, message: str) -> Optional[Claim]:
+        normalized = self._normalize_claim_text(message)
+        target_id = self._semantic_player(normalized)
+        room = self._semantic_room(normalized)
+
+        if target_id is not None and "vent" in normalized:
+            return Claim(
+                kind=ClaimKind.SAW_VENT,
+                speaker_id=speaker_id,
+                target_id=target_id,
+                room=self.controlled_player.location,
+                truth_value=self.vent_since_meeting.get(target_id, False),
+            )
+
+        accusation_words = {"sus", "suspicious", "impostor", "imposter", "vote"}
+        if target_id is not None and any(word in normalized for word in accusation_words):
+            target = self.players.get(target_id)
+            return Claim(
+                kind=ClaimKind.ACCUSE_IMPOSTOR,
+                speaker_id=speaker_id,
+                target_id=target_id,
+                room=self.controlled_player.location,
+                truth_value=target is not None and target.role is PlayerRole.IMPOSTOR,
+            )
+
+        if target_id is not None and room is not None and any(
+            word in normalized for word in {"saw", "spotted", "with"}
+        ):
+            return Claim(
+                kind=ClaimKind.SAW_PLAYER,
+                speaker_id=speaker_id,
+                target_id=target_id,
+                room=room,
+                truth_value=room in self.location_history.get(target_id, []),
+            )
+
+        if room is not None and re.search(r"\bi\b", normalized) and any(
+            word in normalized for word in {"was", "at", "in", "over", "doing"}
+        ):
+            return Claim(
+                kind=ClaimKind.SELF_LOCATION,
+                speaker_id=speaker_id,
+                room=room,
+                truth_value=room in self.location_history.get(speaker_id, []),
+            )
+
+        return None
+
+    def _normalize_claim_text(self, message: str) -> str:
+        return re.sub(r"[^a-z0-9_\s-]", " ", message.lower())
+
+    def _semantic_player(self, text: str) -> Optional[str]:
+        words = text.split()
+        for player_id in self.config.player_ids:
+            if player_id.lower() in words:
+                return player_id
+        matches = get_close_matches(
+            " ".join(words),
+            [player_id.lower() for player_id in self.config.player_ids],
+            n=1,
+            cutoff=0.86,
+        )
+        if not matches:
+            return None
+        lookup = {player_id.lower(): player_id for player_id in self.config.player_ids}
+        return lookup[matches[0]]
+
+    def _semantic_room(self, text: str) -> Optional[str]:
+        lookup = {room.lower(): room for room in ROOM_GRAPH}
+        words = text.split()
+        for room_lower, room in lookup.items():
+            if room_lower in text:
+                return room
+        matches = get_close_matches(" ".join(words), list(lookup), n=1, cutoff=0.65)
+        if matches:
+            return lookup[matches[0]]
+        for word in words:
+            matches = get_close_matches(word, list(lookup), n=1, cutoff=0.82)
+            if matches:
+                return lookup[matches[0]]
         return None
 
     def _canonical_room(self, room: str) -> str:
@@ -480,6 +565,8 @@ class AmongUsEngine:
         return reward
 
     def _bot_votes(self, human_target_id: str) -> dict[str, str]:
+        if self.bot_vote_policy is not None:
+            return self.bot_vote_policy.bot_votes(self, human_target_id)
         false_speaker_id = self._latest_false_penalized_claim_speaker()
         if false_speaker_id is None:
             accused_impostor_id = self._latest_true_accusation_target()

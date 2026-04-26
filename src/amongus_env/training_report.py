@@ -157,12 +157,12 @@ def _pending_status(training_summary: dict[str, Any]) -> dict[str, dict[str, str
             ),
         },
         "learned_bots": {
-            "status": "not_done",
-            "detail": "Bots remain deterministic scripted policies.",
+            "status": "partial",
+            "detail": "A supervised learned bot-vote policy can be trained from synthetic expert traces; it is not an RL-trained dialogue agent.",
         },
         "open_ended_nlp": {
-            "status": "not_done",
-            "detail": "Claims are deterministic parsers, not open-ended NLP.",
+            "status": "partial",
+            "detail": "Meeting speech has a deterministic semantic fallback for natural claim phrasings; it is not full arbitrary-language understanding.",
         },
         "vents": {
             "status": "done",

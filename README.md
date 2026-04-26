@@ -1,3 +1,15 @@
+---
+title: Among Us OpenEnv Eval
+emoji: 🕵️
+colorFrom: red
+colorTo: purple
+sdk: gradio
+sdk_version: "5.49.1"
+python_version: "3.11"
+app_file: app.py
+pinned: false
+---
+
 # Among Us OpenEnv MVP
 
 Deterministic Among Us-style environment for OpenEnv and later GRPO/RLVR training.

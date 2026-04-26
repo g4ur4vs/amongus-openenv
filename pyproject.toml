@@ -13,6 +13,10 @@ dependencies = [
     "pydantic>=2.0",
 ]
 
+[project.scripts]
+amongus-baseline-eval = "amongus_env.eval_suite:main"
+amongus-golden-trace = "amongus_env.golden_episode:main"
+
 [project.optional-dependencies]
 training = [
     "datasets>=2.0",

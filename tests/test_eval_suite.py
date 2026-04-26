@@ -36,7 +36,7 @@ def test_eval_suite_runs_multiple_baseline_scenarios() -> None:
         "golden_false_alibi",
         "invalid_move_no_state_change",
         "crewmate_task_route",
-        "meeting_pass_no_majority",
+        "meeting_pass_bot_majority",
         "impostor_parity_win",
         "kill_cooldown_blocks_second_kill",
     ]

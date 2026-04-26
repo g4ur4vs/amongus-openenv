@@ -335,7 +335,7 @@ class AmongUsEngine:
             return self._illegal(f"Cannot vote for {target_id}").reward
 
         ballots = {self.controlled_player.player_id: target_id}
-        ballots.update(self._bot_votes())
+        ballots.update(self._bot_votes(target_id))
         active_voters = [
             player
             for player in self.players.values()
@@ -365,10 +365,16 @@ class AmongUsEngine:
         self._reset_meeting_protocol()
         return reward
 
-    def _bot_votes(self) -> dict[str, str]:
+    def _bot_votes(self, human_target_id: str) -> dict[str, str]:
         false_speaker_id = self._latest_false_self_location_speaker()
         if false_speaker_id is None:
-            return {}
+            return {
+                player.player_id: human_target_id
+                for player in self.players.values()
+                if player.player_id != self.controlled_player.player_id
+                and player.alive
+                and not player.ejected
+            }
         target = self.players.get(false_speaker_id)
         if target is None or not target.alive or target.ejected:
             return {}

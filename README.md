@@ -1,5 +1,6 @@
 ---
-title: Among Us OpenEnv Eval
+
+## title: Among Us OpenEnv Eval
 emoji: 🕵️
 colorFrom: red
 colorTo: purple
@@ -8,7 +9,6 @@ sdk_version: "5.49.1"
 python_version: "3.11"
 app_file: app.py
 pinned: false
----
 
 # Among Us OpenEnv MVP
 
@@ -37,7 +37,7 @@ python3 -m pytest
 Run the deterministic judge-facing trace:
 
 ```bash
-PYTHONPATH=src python3 -m amongus_env.golden_episode
+amongus-golden-trace
 ```
 
 The trace demonstrates:
@@ -58,11 +58,11 @@ TRL tool summaries include compact tails of `message_log`, `discussion_log`, and
 Run the pass/fail eval JSON:
 
 ```bash
-PYTHONPATH=src python3 -m amongus_env.eval_suite
+amongus-baseline-eval
 ```
 
 The eval currently runs six deterministic scenarios: golden false alibi, invalid
-movement, crewmate task route, meeting pass/no-majority, impostor parity win,
+movement, crewmate task route, meeting pass/bot-majority, impostor parity win,
 and kill cooldown blocking.
 
 ## Hugging Face Space

@@ -208,7 +208,7 @@ def test_false_self_location_claim_gets_hallucination_penalty() -> None:
     assert observation.claims[-1].truth_value is False
 
 
-def test_single_vote_without_bot_support_ejects_nobody() -> None:
+def test_bot_votes_mirror_controlled_vote_without_false_alibi() -> None:
     engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
     engine.reset()
     engine.step(CallMeeting())
@@ -216,10 +216,11 @@ def test_single_vote_without_bot_support_ejects_nobody() -> None:
 
     observation = engine.step(Vote(target_id="blue"))
 
-    assert observation.reward == 0.0
-    assert engine.players["blue"].ejected is False
-    assert observation.done is False
-    assert "No majority" in observation.message_log[-1]
+    assert observation.reward == 1.5
+    assert engine.players["blue"].ejected is True
+    assert observation.done is True
+    assert observation.winner is Winner.CREWMATES
+    assert "Ejected blue" in observation.message_log[-2]
 
 
 def test_bot_votes_eject_speaker_caught_in_false_alibi() -> None:
@@ -235,11 +236,27 @@ def test_bot_votes_eject_speaker_caught_in_false_alibi() -> None:
     assert "Ejected red" in observation.message_log[-1]
 
 
-def test_majority_voting_tie_ejects_nobody() -> None:
+def test_bot_votes_preserve_false_alibi_priority_over_controlled_vote() -> None:
+    engine = AmongUsEngine(seed=1, impostor_ids=["blue"])
+    engine.reset()
+    engine.step(CallMeeting())
+    engine.step(Speak(message="I was in Electrical"))
+
+    observation = engine.step(Vote(target_id="blue"))
+
+    assert engine.players["red"].ejected is True
+    assert engine.players["blue"].ejected is False
+    assert observation.reward == -0.5
+    assert "Ejected red" in observation.message_log[-1]
+
+
+def test_majority_voting_tie_ejects_nobody_without_bot_ballots() -> None:
     engine = AmongUsEngine(seed=1, impostor_ids=["blue"], player_ids=["red", "blue", "green"])
     engine.reset()
     engine.step(CallMeeting())
     engine.step(PassMeeting())
+
+    engine._bot_votes = lambda human_target_id: {}
 
     observation = engine.step(Vote(target_id="blue"))
 

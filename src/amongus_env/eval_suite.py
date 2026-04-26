@@ -196,7 +196,7 @@ def _run_meeting_pass_eval() -> dict[str, Any]:
     passed = _step_observation(trace, "pass_meeting")
     vote = _step_observation(trace, "vote_blue")
     return _scenario_result(
-        "meeting_pass_no_majority",
+        "meeting_pass_bot_majority",
         trace,
         [
             _check(
@@ -207,12 +207,12 @@ def _run_meeting_pass_eval() -> dict[str, Any]:
                 f"voting={passed.get('voting_open')}; reward={passed.get('reward')}",
             ),
             _check(
-                "vote_without_bot_support_no_majority",
-                vote.get("reward") == 0.0
-                and vote.get("done") is False
-                and vote.get("phase") == "tasks"
-                and vote.get("message_log", [])[-1:] == ["No majority; nobody ejected"],
-                f"reward={vote.get('reward')}; last_message={vote.get('message_log', [])[-1:]}",
+                "bot_votes_eject_controlled_target",
+                vote.get("reward") == 1.5
+                and vote.get("done") is True
+                and vote.get("winner") == "crewmates"
+                and vote.get("message_log", [])[-2:-1] == ["Ejected blue"],
+                f"reward={vote.get('reward')}; ejection_message={vote.get('message_log', [])[-2:-1]}",
             ),
         ],
     )

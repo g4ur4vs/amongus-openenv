@@ -56,3 +56,12 @@ reward, meeting protocol state, false-alibi penalty, and bot-vote ejection.
 
 The repo includes a Gradio `app.py` for a Space. It exposes buttons for the
 baseline eval and the full golden trace.
+
+Create and upload the Space after authenticating safely:
+
+```bash
+read -s HF_TOKEN
+export HF_TOKEN
+python3 scripts/create_hf_space.py
+unset HF_TOKEN
+```

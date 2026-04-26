@@ -84,7 +84,7 @@ This scores the false self-location claim resolution as deceiver-vs-assembly Elo
 the deceiver loses Elo when the false claimant is ejected, and gains Elo when a
 different player is ejected.
 
-## GRPO Smoke
+## GRPO Training Skeleton
 
 Run the opt-in GRPO wiring smoke without downloading a model:
 
@@ -95,6 +95,20 @@ amongus-grpo-smoke
 If `trl` is installed through `.[training]`, the smoke imports `GRPOConfig` and
 `GRPOTrainer`. Without the training extra, it still verifies the local
 `AmongUsToolEnv` and RLVR reward hook.
+
+Run the GRPO training dry-run:
+
+```bash
+amongus-grpo-train
+```
+
+This prints the base model id, GRPO config, prompt set size, environment factory
+contract, and reward contract. It intentionally does not construct a trainer,
+load a model, download weights, or claim training results.
+
+Reward contract: `reward_from_game_state([env])` returns one dense RLVR reward
+per `AmongUsToolEnv`, equal to that environment's latest `Observation.reward`.
+The current contract is step-level, not an episode-return aggregate.
 
 ## OpenEnv Server
 

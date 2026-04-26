@@ -21,6 +21,7 @@ amongus-golden-trace = "amongus_env.golden_episode:main"
 amongus-grpo-smoke = "amongus_env.grpo_smoke:main"
 amongus-reasoning-trace = "amongus_env.reasoning_trace:main"
 amongus-deception-elo = "amongus_env.deception_elo:main"
+amongus-grpo-train = "amongus_env.grpo_train:main"
 
 [project.optional-dependencies]
 training = [
